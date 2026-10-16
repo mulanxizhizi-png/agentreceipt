@@ -96,6 +96,22 @@ Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hi
 - **Config warning:** if `.agentreceipt/config.json` changed since the last allowed stop (e.g. the test command was swapped), the receipt carries a warning and the agent/user sees it. It warns; it does not block.
 - Paths are read with `git -z`, so non-ASCII, spaces and renames are reported exactly.
 
+## With agentundo: go back to when tests passed
+
+If [agentundo](https://github.com/mulanxizhizi-png/agentundo) is also set up in the project, every receipt records the agentundo snapshot of the state it verified:
+
+- **Green** receipts mark that snapshot as *last known good*.
+- **Red/blocked** receipts include a ready-to-run command that returns the project to the last state where the tests passed:
+
+```
+ Snapshot: agentundo #9
+ Go back:  ~/.agentundo/bin/agentundo restore 4  (last state where tests passed, #4)
+```
+
+The same data is in the JSON receipt under `undo` (`snapshotId`, `lastKnownGood`, `lastGreenSnapshotId`, `restoreCommand`) and in the PR comment. The command is shown only to you; the agent is never told to restore. `agentundo list` marks snapshots with green or red receipts.
+
+The two tools don't depend on each other. Without agentundo, receipts are unchanged. agentreceipt calls agentundo's CLI with a short timeout, and any problem is ignored. Set `AGENTRECEIPT_NO_UNDO=1` to turn the integration off.
+
 ## GitHub Action (free)
 
 Runs your tests on every pull request, writes a receipt in the same JSON format (`agent: "ci"`, with the PR title and body as the claim), and posts a single PR comment that is updated on every push. The check fails when tests fail.

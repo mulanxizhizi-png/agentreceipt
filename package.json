@@ -1,6 +1,6 @@
 {
   "name": "agentreceipt",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Make your coding agent show a receipt before it says \"done\": a Stop hook for Codex and Claude Code that runs your tests, checks the git diff, and sends the agent back to work if they fail.",
   "bin": {
     "agentreceipt": "bin/agentreceipt.js"

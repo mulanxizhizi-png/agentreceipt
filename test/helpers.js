@@ -5,6 +5,8 @@ const { execFileSync } = require('child_process');
 if (!process.env.AGENTRECEIPT_TEST_HOME) {
   process.env.AGENTRECEIPT_TEST_HOME = '1';
   process.env.AGENTRECEIPT_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-home-'));
+  // never pick up a real agentundo install from the machine running the tests
+  process.env.AGENTUNDO_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-undo-home-'));
 }
 function tmpRepo(files = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ar-'));

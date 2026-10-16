@@ -46,10 +46,12 @@ function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff
   };
 }
 
+function receiptName(receipt) { return `${receipt.createdAt.replace(/[:.]/g, '-')}-${receipt.status}.json`; }
+
 function writeReceipt(root, receipt) {
   const dir = path.join(root, DIR, 'receipts');
   fs.mkdirSync(dir, { recursive: true });
-  const name = `${receipt.createdAt.replace(/[:.]/g, '-')}-${receipt.status}.json`;
+  const name = receiptName(receipt);
   const file = path.join(dir, name);
   fs.writeFileSync(file, JSON.stringify(receipt, null, 2) + '\n');
   return file;
@@ -71,6 +73,10 @@ function formatReceipt(r, { color = false } = {}) {
   if (r.fingerprint && r.fingerprint.changedDuringTests) out.push(c('31', ' Warning:  code changed while tests were running; result not trusted'));
   for (const w of r.warnings || []) out.push(c('33', ` Warning:  ${w}`));
   if (r.tests.logPath) out.push(` Log:      ${r.tests.logPath}`);
+  if (r.undo) {
+    out.push(` Snapshot: agentundo #${r.undo.snapshotId}${r.undo.lastKnownGood ? ' (last known good)' : ''}`);
+    if (r.undo.restoreCommand) out.push(c('36', ` Go back:  ${r.undo.restoreCommand}`) + `  (last state where tests passed, #${r.undo.lastGreenSnapshotId})`);
+  }
   if (r.diff.testFilesChanged.length) out.push(c('33', ` Warning:  test files changed: ${r.diff.testFilesChanged.join(', ')}`));
   if (r.agent !== 'ci') out.push(` Blocks:   ${r.blocks.count}/${r.blocks.max}`);
   if (r.error) out.push(c('35', ` Error:    ${r.error.split('\n')[0].slice(0, 200)}`));
@@ -79,4 +85,4 @@ function formatReceipt(r, { color = false } = {}) {
   return out.join('\n');
 }
 
-module.exports = { NOTICE_EN, NOTICE_ZH, criteriaChange, SCHEMA_VERSION, buildReceipt, writeReceipt, formatReceipt };
+module.exports = { receiptName, NOTICE_EN, NOTICE_ZH, criteriaChange, SCHEMA_VERSION, buildReceipt, writeReceipt, formatReceipt };

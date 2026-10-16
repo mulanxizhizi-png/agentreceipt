@@ -5,7 +5,8 @@ const crypto = require('crypto');
 const { findRoot, loadConfig, configFingerprint, DIR } = require('./config');
 const { runTests } = require('./run');
 const { diffSummary, codeFingerprint, headSha, isAncestor, git: gitCmd } = require('./git');
-const { buildReceipt, writeReceipt, formatReceipt } = require('./receipt');
+const { buildReceipt, writeReceipt, formatReceipt, receiptName } = require('./receipt');
+const { recordUndo } = require('./undo');
 const { getBlocks, setBlocks, withSessionLock, getLast, setLast } = require('./state');
 const { extractClaim } = require('./claim');
 
@@ -90,6 +91,9 @@ async function handleStop(input, { agent = 'codex' } = {}) {
         config: { fingerprint: cfgFp, changedSinceLastVerified: configChanged, ...(configChanged && last.testCommand && last.testCommand !== cfg.testCommand ? { previousTestCommand: last.testCommand } : {}) },
         warnings,
       });
+      // agentundo (optional): snapshot id of the verified state; for the user only, never in the block reason.
+      const undo = recordUndo(root, receipt.status, receiptName(receipt));
+      if (undo) receipt.undo = undo;
       const file = writeReceipt(root, receipt);
       setBlocks(root, sessionId, canBlock ? blockCount : 0); // reset once the agent is allowed to stop
       if (!canBlock) setLast(root, { sha: head, configFingerprint: cfgFp, testCommand: cfg.testCommand, receipt: path.basename(file) });

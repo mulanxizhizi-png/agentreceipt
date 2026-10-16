@@ -1,5 +1,11 @@
 # agentreceipt 开发进度
 
+## v0.1.3（10 月 16 日晚，开发和调试）：和 agentundo 打通
+- 项目里装了 agentundo 时，每张收据都会记下验证那一刻对应的 agentundo 快照编号（JSON 里的 `undo` 字段）。绿色收据把这张快照标成“最后一次测试通过”；红色和 blocked 收据会多一行“Go back”，给出回到最后一次测试通过状态的命令，比如 `~/.agentundo/bin/agentundo restore 4`。这个命令只给用户看（收据和 PR 评论），不会写进发给 agent 的拦截理由。
+- 两个工具互不依赖：没装 agentundo 时收据和以前完全一样。调用 agentundo 有 8 秒超时，出任何错都忽略。设 `AGENTRECEIPT_NO_UNDO=1` 可以关掉。
+- 新增 4 个测试，包括跨工具端到端：两个都装上，先绿后红，再执行收据里的命令，确认回到绿色状态，并且收据文件没被恢复操作删掉。全部 67 个测试连跑 3 次都通过。
+- v0.1.2 仍以 `ea7b259` 为准，这次只在 main 上追加了新提交，不影响部署给 ea7b259 打 tag。
+
 ## 第 1 天（10 月 16 日）
 - 已完成：
   - 骨架代码写好，在共享电脑 /workspace/agentreceipt：零依赖 Node CLI，`init` 自动探测测试命令（npm/pnpm/yarn、pytest、cargo、go、make），写 `.agentreceipt/config.json`，安装 Codex（~/.codex/hooks.json）和 Claude Code（.claude/settings.json）的 Stop hook。
