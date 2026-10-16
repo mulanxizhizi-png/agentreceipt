@@ -79,32 +79,57 @@ async function main() {
     case 'uninstall': {
       // Default: this project only. Global pieces (Codex hooks.json, ~/.claude/settings.json hook, runtime)
       // are removed with --global, or automatically when no other registered project still uses them.
+      // --global: other registered projects lose hook/state/logs but keep receipts (and their ignore rule).
+      // --purge (implies --global): receipts are deleted everywhere too; needs confirmation or --yes.
       const root = findRoot(process.cwd());
+      const purge = args.includes('--purge');
+      const others = inst.readRegistry().filter((p) => p !== path.resolve(root) && fs.existsSync(p));
+      const global = purge || args.includes('--global') || others.length === 0;
+      if (purge && others.length) {
+        const list = [root, ...others].map((p) => `  - ${p}`).join('\n');
+        if (!args.includes('--yes')) {
+          if (!process.stdin.isTTY) {
+            console.error(`agentreceipt: --purge deletes receipts in these projects:\n${list}\nRefusing without confirmation (not a terminal). Re-run with --yes to proceed.`);
+            process.exitCode = 1; return;
+          }
+          console.log(`--purge will delete receipts, state and logs in:\n${list}`);
+          const a = await ask('Proceed? [y/N] ');
+          if (!/^y(es)?$/i.test(a)) { console.log('Aborted; nothing changed.'); return; }
+        }
+      }
       let failed = false;
-      const tryUninstall = (a, scope) => {
-        try { const f = inst.uninstall({ agent: a, root, scope }); if (f) console.log(`Removed hook from ${f}`); }
-        catch (e) { failed = true; console.error(`agentreceipt: skipped: ${e.message}`); }
+      const report = [];
+      const tryUninstall = (a, scope, r = root) => {
+        try { return inst.uninstall({ agent: a, root: r, scope }); }
+        catch (e) { failed = true; console.error(`agentreceipt: skipped: ${e.message}`); return null; }
       };
-      tryUninstall('claude', 'local'); tryUninstall('claude', 'project');
-      if (inst.removeExcludes(root)) console.log('Removed agentreceipt block from .git/info/exclude');
-      if (inst.cleanProjectData(root)) console.log('Removed receipts/state from .agentreceipt (config.json kept)');
-      const others = inst.unregisterProject(root);
-      const global = args.includes('--global') || others.length === 0;
+      const doProject = (p, keepReceipts) => {
+        const deleted = [], kept = [];
+        for (const sc of ['local', 'project']) { const f = tryUninstall('claude', sc, p); if (f) deleted.push(`hook in ${path.relative(p, f)}`); }
+        const res = inst.cleanProjectData(p, { keepReceipts });
+        deleted.push(...res.deleted); kept.push(...res.kept);
+        if (keepReceipts && res.kept.includes('.agentreceipt/receipts/')) { inst.setExcludes(p, ['.agentreceipt/receipts/']); kept.push('.git/info/exclude rule for .agentreceipt/receipts/'); }
+        else if (inst.removeExcludes(p)) deleted.push('.git/info/exclude block');
+        report.push({ p, deleted, kept });
+      };
+      doProject(root, false);
+      inst.unregisterProject(root);
       if (!global) {
         console.log(`Kept the shared runtime and global hooks: ${others.length} other project${others.length > 1 ? 's' : ''} still use${others.length > 1 ? '' : 's'} agentreceipt. Run \`agentreceipt uninstall --global\` to remove everything.`);
       } else {
-        // the global hooks/runtime go away, so clean every other registered project too
-        for (const p of others) {
-          try { inst.uninstall({ agent: 'claude', root: p, scope: 'local' }); inst.removeExcludes(p); if (inst.cleanProjectData(p)) console.log(`Cleaned ${p}`); }
-          catch (e) { console.error(`agentreceipt: skipped ${p}: ${e.message}`); }
-        }
-        tryUninstall('codex'); tryUninstall('claude', 'user');
-        if (failed) { console.error('agentreceipt: runtime kept because a hook could not be removed.'); process.exitCode = 1; return; }
-        inst.removeRuntime();
-        console.log(`Removed runtime from ${path.join(inst.homeDir(), 'runtime')}`);
+        for (const p of others) { try { doProject(p, !purge); } catch (e) { failed = true; console.error(`agentreceipt: skipped ${p}: ${e.message}`); } }
+        const g = [];
+        for (const [a, sc] of [['codex'], ['claude', 'user']]) { const f = tryUninstall(a, sc); if (f) g.push(`hook in ${f}`); }
+        if (failed) { console.error('agentreceipt: runtime kept because a hook could not be removed.'); process.exitCode = 1; }
+        else { inst.removeRuntime(); g.push(`runtime ${path.join(inst.homeDir(), 'runtime')}`); }
+        report.push({ p: 'global', deleted: g, kept: [] });
+      }
+      for (const r of report) {
+        console.log(`\n${r.p}:`);
+        console.log(`  deleted: ${r.deleted.length ? r.deleted.join(', ') : '(nothing)'}`);
+        console.log(`  kept:    ${r.kept.length ? r.kept.join(', ') : '(nothing)'}`);
       }
       if (failed) process.exitCode = 1;
-      if (fs.existsSync(path.join(root, DIR, 'config.json'))) console.log(`Left ${path.join(DIR, 'config.json')} in place (team-shared; delete it yourself if you want).`);
       return;
     }
     case '--version': case '-v': return console.log(inst.VERSION);
@@ -113,7 +138,10 @@ async function main() {
 Usage:
   agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope local|user] [--timeout 300] [--max-blocks 3]
   agentreceipt last        print the latest receipt
-  agentreceipt uninstall [--global]   remove this project's hooks (--global: also Codex/user hooks + runtime)
+  agentreceipt uninstall [--global] [--purge [--yes]]
+      remove this project's hooks and generated files (config.json is kept)
+      --global: also Codex/user hooks + runtime; other projects lose hooks/state/logs but keep receipts
+      --purge:  like --global, and delete receipts in every project (asks first; --yes to skip)
   agentreceipt hook        (called by the agent's Stop hook)`);
   }
 }

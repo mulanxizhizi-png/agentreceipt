@@ -32,18 +32,49 @@ test('cleanProjectData removes the dir when config.json is absent', () => {
   const d = tmpRepo(PKG); const dir = path.join(d, '.agentreceipt');
   fs.mkdirSync(path.join(dir, 'receipts'), { recursive: true }); fs.writeFileSync(path.join(dir, 'receipts', 'a.json'), '{}');
   fs.mkdirSync(path.join(dir, 'state')); fs.writeFileSync(path.join(dir, 'state', 'last.json'), '{}');
-  assert.equal(inst.cleanProjectData(d), true);
+  assert.deepEqual(inst.cleanProjectData(d).deleted, ['.agentreceipt/receipts/', '.agentreceipt/state/']);
   assert.equal(fs.existsSync(dir), false);
-  assert.equal(inst.cleanProjectData(d), false);
+  assert.deepEqual(inst.cleanProjectData(d), { deleted: [], kept: [] });
 });
 
-test('uninstall --global cleans every registered project', () => {
+const ls = (p) => fs.readdirSync(path.join(p, '.agentreceipt')).sort();
+const own = (p) => status(p).filter((l) => l.includes('.agentreceipt') || l.includes('.claude')).map((l) => l.slice(3));
+function twoProjects() {
   const env = mkenv(); const A = tmpRepo(PKG); const B = tmpRepo(PKG);
   assert.equal(cli(['init'], A, env).status, 0); assert.equal(cli(['init'], B, env).status, 0);
   stop(env, A); stop(env, B);
-  assert.equal(cli(['uninstall', '--global'], A, env).status, 0);
-  for (const p of [A, B]) {
-    assert.deepEqual(fs.readdirSync(path.join(p, '.agentreceipt')), ['config.json']);
-    assert.deepEqual(status(p).filter((l) => l.includes('.agentreceipt') || l.includes('.claude')).map((l) => l.slice(3)), ['.agentreceipt/config.json']);
-  }
+  return { env, A, B };
+}
+
+test('uninstall --global: current project fully cleaned, other projects keep receipts (still ignored)', () => {
+  const { env, A, B } = twoProjects();
+  const r = cli(['uninstall', '--global'], A, env);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(ls(A), ['config.json']);
+  assert.deepEqual(own(A), ['.agentreceipt/config.json']);
+  assert.deepEqual(ls(B), ['config.json', 'receipts']);
+  assert.ok(fs.readdirSync(path.join(B, '.agentreceipt', 'receipts')).length > 0);
+  assert.equal(fs.existsSync(path.join(B, '.claude', 'settings.local.json')), false, 'B hook removed');
+  assert.deepEqual(own(B), ['.agentreceipt/config.json'], 'receipts stay ignored in B');
+  const ex = fs.readFileSync(inst.excludePath(B), 'utf8');
+  assert.match(ex, /\.agentreceipt\/receipts\//); assert.doesNotMatch(ex, /state\//);
+  // per-project report
+  assert.match(r.stdout, new RegExp(`${B.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}:\\n  deleted: .*state.*\\n  kept: .*receipts`));
+  assert.match(r.stdout, /global:\n  deleted: .*runtime/);
+});
+
+test('uninstall --purge refuses without a TTY or --yes, changes nothing', () => {
+  const { env, A, B } = twoProjects();
+  const r = cli(['uninstall', '--purge'], A, env);
+  assert.equal(r.status, 1); assert.match(r.stderr, /Refusing.*--yes/s); assert.ok(r.stderr.includes(B));
+  assert.ok(ls(A).includes('receipts')); assert.ok(ls(B).includes('receipts'));
+  assert.ok(fs.existsSync(path.join(env.AGENTRECEIPT_HOME, 'bin', 'agentreceipt-hook')));
+});
+
+test('uninstall --purge --yes deletes receipts everywhere', () => {
+  const { env, A, B } = twoProjects();
+  const r = cli(['uninstall', '--purge', '--yes'], A, env);
+  assert.equal(r.status, 0, r.stderr);
+  for (const p of [A, B]) { assert.deepEqual(ls(p), ['config.json']); assert.deepEqual(own(p), ['.agentreceipt/config.json']); }
+  assert.equal(fs.existsSync(path.join(env.AGENTRECEIPT_HOME, 'bin')), false);
 });

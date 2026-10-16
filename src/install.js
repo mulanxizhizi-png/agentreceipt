@@ -217,25 +217,35 @@ function unregisterProject(root, env = process.env) {
   return rest;
 }
 
-// Delete generated data (receipts/state/logs) under <root>/.agentreceipt, keep config.json;
-// remove the dir if nothing else is left. Returns true if anything was removed.
-function cleanProjectData(root) {
+// Delete generated data (receipts/state/logs + init's untracked .gitignore) under <root>/.agentreceipt.
+// config.json is always kept; keepReceipts keeps receipts/. Removes the dir if it ends up empty.
+// Returns { deleted: [...], kept: [...] } (paths relative to the project root).
+function cleanProjectData(root, { keepReceipts = false } = {}) {
   const dir = path.join(root, '.agentreceipt');
-  if (!fs.existsSync(dir)) return false;
-  let removed = false;
+  const res = { deleted: [], kept: [] };
+  if (!fs.existsSync(dir)) return res;
   for (const n of ['receipts', 'state', 'logs']) {
     const p = path.join(dir, n);
-    if (fs.existsSync(p)) { fs.rmSync(p, { recursive: true, force: true }); removed = true; }
+    if (!fs.existsSync(p)) continue;
+    if (n === 'receipts' && keepReceipts) { res.kept.push('.agentreceipt/receipts/'); continue; }
+    fs.rmSync(p, { recursive: true, force: true }); res.deleted.push(`.agentreceipt/${n}/`);
   }
-  // the .gitignore init wrote: drop it unless the user committed it or changed it
   const gi = path.join(dir, '.gitignore');
-  if (fs.existsSync(gi) && fs.readFileSync(gi, 'utf8') === 'receipts/\nstate/\n') {
+  if (fs.existsSync(gi)) {
     let tracked = false;
     try { require('child_process').execFileSync('git', ['ls-files', '--error-unmatch', '.agentreceipt/.gitignore'], { cwd: root, stdio: 'ignore' }); tracked = true; } catch {}
-    if (!tracked) { fs.unlinkSync(gi); removed = true; }
+    if (!tracked && fs.readFileSync(gi, 'utf8') === 'receipts/\nstate/\n') { fs.unlinkSync(gi); res.deleted.push('.agentreceipt/.gitignore'); }
+    else res.kept.push('.agentreceipt/.gitignore');
   }
-  try { if (!fs.readdirSync(dir).length) { fs.rmdirSync(dir); removed = true; } } catch {}
-  return removed;
+  if (fs.existsSync(path.join(dir, 'config.json'))) res.kept.push('.agentreceipt/config.json');
+  try { if (!fs.readdirSync(dir).length) fs.rmdirSync(dir); } catch {}
+  return res;
+}
+
+// Replace our exclude block with exactly `entries` (empty => remove the block).
+function setExcludes(root, entries) {
+  removeExcludes(root);
+  return entries.length ? addExcludes(root, entries) : true;
 }
 
 function removeRuntime(env = process.env) {
@@ -246,4 +256,4 @@ function removeRuntime(env = process.env) {
   try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
 }
 
-module.exports = { cleanProjectData, readRegistry, registerProject, unregisterProject, excludePath, shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };
+module.exports = { cleanProjectData, setExcludes, readRegistry, registerProject, unregisterProject, excludePath, shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };

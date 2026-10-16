@@ -61,3 +61,9 @@
 - 修复：`uninstall` 会删除 `.agentreceipt/` 下的 `receipts/`、`state/`、`logs/`，以及 init 自动生成且未被提交的 `.gitignore`，只保留 `config.json`；没有 `config.json` 时整个目录删掉。`uninstall --global` 对所有已登记的项目都做同样清理。
 - 卸载后 `git status` 里与 agentreceipt 相关的只剩 `.agentreceipt/config.json`（如果它没提交过）。
 - 新增 3 个测试，共 58 个；Node 20 连跑 20 次全绿。版本号升到 0.1.2（tag/release 由部署来做）。
+
+## 2026-10-16 v0.1.2 补充：`--global` 保留其他项目的收据，新增 `--purge`
+- `uninstall --global`：当前项目照旧清干净，只留 `config.json`；其他登记过的项目删掉 hook、state 和 logs，**保留收据**，同时保留 `.git/info/exclude` 里忽略收据的那一条规则，那边的 `git status` 仍然干净。
+- 新增 `uninstall --purge`：在 `--global` 的基础上把所有项目的收据也删掉。执行前先列出受影响的项目，要求确认（或加 `--yes`）；不在终端里运行又没加 `--yes` 时会拒绝执行，什么都不改。
+- 卸载结束后逐个项目打印：删了什么、保留了什么。
+- README 和帮助文本已更新；新增测试，共 60 个，Node 20 连跑 20 次全绿。

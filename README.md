@@ -133,6 +133,11 @@ npx github:mulanxizhizi-png/agentreceipt uninstall
 
 By default this only affects the **current project**: it removes the hook from `.claude/settings.local.json` (and any legacy entry in `.claude/settings.json`) and the agentreceipt block in `.git/info/exclude`.
 
-The shared pieces (the Codex hook in `~/.codex/hooks.json`, the hook in `~/.claude/settings.json`, and `~/.agentreceipt/runtime` + `bin`) are used by every project you ran `init` in, so they are kept while another project still has agentreceipt set up, and removed automatically when you uninstall the last one. `uninstall --global` removes them right away. Files without an agentreceipt hook are left untouched; backups of edited settings stay in `~/.agentreceipt/backups/`. `.agentreceipt/config.json` is left in place (it's team-shared); delete `.agentreceipt/` yourself if you want.
+`uninstall` removes this project's hooks and generated files (`.agentreceipt/receipts/`, `state/`, `logs/`, the ignore block); `.agentreceipt/config.json` is kept (it's team-shared), and the folder is removed if nothing else is left. At the end it prints, per project, what was deleted and what was kept.
+
+The shared pieces (the Codex hook in `~/.codex/hooks.json`, the hook in `~/.claude/settings.json`, and `~/.agentreceipt/runtime` + `bin`) are used by every project you ran `init` in, so they are kept while another project still has agentreceipt set up, and removed automatically when you uninstall the last one. Files without an agentreceipt hook are left untouched; backups of edited settings stay in `~/.agentreceipt/backups/`.
+
+- `uninstall --global` removes the shared pieces right away. The current project is cleaned as above; every other registered project loses its hook, state and logs but **keeps its receipts**, and keeps the `.git/info/exclude` rule for `.agentreceipt/receipts/` so `git status` stays clean there.
+- `uninstall --purge` does the same and also deletes receipts in every project. It lists the affected projects and asks for confirmation; pass `--yes` to skip the prompt. Without a terminal and without `--yes` it refuses and changes nothing.
 
 MIT licensed.

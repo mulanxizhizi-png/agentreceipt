@@ -63,12 +63,12 @@ test('uninstall in project A keeps the runtime used by project B; last project r
   const out = spawnSync('/bin/sh', [shim, 'claude'], { input: JSON.stringify({ cwd: B, session_id: 's' }), encoding: 'utf8' });
   assert.match(JSON.parse(out.stdout).systemMessage, /PASS/, 'B still verified after A uninstalled');
   r = cli(['uninstall'], B, env);
-  assert.match(r.stdout, /Removed runtime/);
+  assert.match(r.stdout, /deleted:.*runtime/);
   assert.equal(fs.existsSync(shim), false); assert.equal(fs.existsSync(path.join(home, 'codex', 'hooks.json')), false);
   // --global removes everything even with others registered
   assert.equal(cli(['init'], A, env).status, 0); assert.equal(cli(['init'], B, env).status, 0);
   r = cli(['uninstall', '--global'], A, env);
-  assert.match(r.stdout, /Removed runtime/); assert.equal(fs.existsSync(shim), false);
+  assert.match(r.stdout, /deleted:.*runtime/); assert.equal(fs.existsSync(shim), false);
 });
 
 test('receipt keeps commits since the last stop visible, records SHA and fingerprints', async () => {
