@@ -28,9 +28,9 @@ Codex won't run a new hook until you trust it. The hook goes to `~/.codex/hooks.
 
 You can review it again anytime with `/hooks`. Upgrading agentreceipt (re-running `init`) doesn't ask for trust again: the hook always calls a stable shim at `~/.agentreceipt/bin/agentreceipt-hook`, and only the shim's target changes.
 
-## Claude Code (experimental, untested)
+## Claude Code (experimental)
 
-Built from the official Claude Code hooks reference, but not yet tested against a live Claude Code.
+Tested end-to-end with Claude Code 2.1.301 in headless mode (`claude -p`), running on DeepSeek's Anthropic-compatible API (`deepseek-flash`). Two cases passed: blocked, then the agent fixed the code and the stop was allowed (PASS); and the block limit was reached (RED). Logs are in `e2e/claude/`. Not yet tested on an official Anthropic subscription, or in the interactive TUI.
 
 - `init` adds a `Stop` hook to `.claude/settings.json` in the repo. Use `--claude-scope user` to put it in `~/.claude/settings.json` instead (respects `CLAUDE_CONFIG_DIR`). Other keys in the file are kept.
 - If tests fail, the hook returns `{"decision":"block","reason":"..."}`. Claude Code then keeps working, using the reason as feedback.

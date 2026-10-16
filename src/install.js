@@ -88,7 +88,11 @@ function uninstall({ agent, root, scope = 'project', env = process.env }) {
   const before = JSON.stringify(readJson(file));
   const doc = removeStopHook(readJson(file));
   if (JSON.stringify(doc) === before) return null; // nothing of ours there; leave the file untouched
-  if (!Object.keys(doc).length) fs.unlinkSync(file); else fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
+  if (!Object.keys(doc).length) {
+    fs.unlinkSync(file);
+    // drop a project .claude/ dir we created and left empty
+    if (agent === 'claude' && scope === 'project') { try { fs.rmdirSync(path.dirname(file)); } catch {} }
+  } else fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
   return file;
 }
 
