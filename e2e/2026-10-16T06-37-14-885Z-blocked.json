@@ -1,36 +1,31 @@
 {
   "schemaVersion": 1,
   "tool": "agentreceipt",
-  "createdAt": "2026-10-16T06:25:23.955Z",
+  "createdAt": "2026-10-16T06:37:14.885Z",
   "agent": "codex",
-  "sessionId": "demo-red",
-  "turnId": null,
-  "status": "red",
-  "decision": "allow",
-  "claim": "Done! Fixed the bug, all tests pass ✅",
+  "sessionId": "01a1436d-c8fe-71f1-8354-c12c67a33f60",
+  "turnId": "01a1436d-cc77-7843-b56e-5378348fa5d2",
+  "status": "blocked",
+  "decision": "block",
+  "claim": "Done, all tests pass.",
   "tests": {
     "command": "npm test",
     "passed": false,
     "exitCode": 1,
     "timedOut": false,
-    "durationMs": 440,
+    "durationMs": 460,
     "outputTail": "\n> test\n> node test.js\n\nFAIL: add(2,3) = -1 expected 5\n"
   },
   "diff": {
     "isRepo": true,
-    "filesChanged": 1,
+    "filesChanged": 0,
     "insertions": 0,
     "deletions": 0,
-    "files": [
-      {
-        "path": ".claude/settings.json",
-        "status": "untracked"
-      }
-    ],
+    "files": [],
     "testFilesChanged": []
   },
   "blocks": {
-    "count": 0,
-    "max": 0
+    "count": 1,
+    "max": 1
   }
 }
