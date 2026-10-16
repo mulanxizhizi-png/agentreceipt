@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const readline = require('readline');
-const { findRoot, loadConfig, saveConfig, DEFAULTS, DIR } = require('../src/config');
+const { findRoot, loadConfig, saveConfig, validateConfig, parseNum, DEFAULTS, DIR } = require('../src/config');
 const { detectTestCommand } = require('../src/detect');
 const { hookMain } = require('../src/hook');
 const inst = require('../src/install');
@@ -22,7 +22,11 @@ function ask(q) {
 
 async function init(args) {
   const root = findRoot(process.cwd());
-  const existing = loadConfig(root) || {};
+  let existing = {};
+  try { existing = loadConfig(root) || {}; } catch (e) {
+    if (!flag(args, '--test') && !flag(args, '--max-blocks') && !flag(args, '--timeout')) { console.error(`agentreceipt: ${e.message}`); process.exit(1); }
+    try { existing = JSON.parse(fs.readFileSync(path.join(root, DIR, 'config.json'), 'utf8')); } catch { existing = {}; }
+  }
   let testCommand = flag(args, '--test', existing.testCommand);
   if (!testCommand) {
     const d = detectTestCommand(root);
@@ -32,9 +36,11 @@ async function init(args) {
   if (!testCommand) { console.error('No test command. Re-run with: agentreceipt init --test "<command>"'); process.exit(1); }
   const cfg = {
     ...DEFAULTS, ...existing, testCommand,
-    timeoutSec: Number(flag(args, '--timeout', existing.timeoutSec || DEFAULTS.timeoutSec)),
-    maxBlocks: Number(flag(args, '--max-blocks', existing.maxBlocks ?? DEFAULTS.maxBlocks)),
+    timeoutSec: parseNum(flag(args, '--timeout', existing.timeoutSec ?? DEFAULTS.timeoutSec)),
+    maxBlocks: parseNum(flag(args, '--max-blocks', existing.maxBlocks ?? DEFAULTS.maxBlocks)),
   };
+  const errs = validateConfig(cfg);
+  if (errs.length) { console.error(`agentreceipt: invalid settings: ${errs.join('; ')}`); process.exit(1); }
   saveConfig(root, cfg);
   // keep receipts/state out of git by default; config stays committable
   // .agentreceipt/.gitignore travels with a committed config.json (teammates' receipts stay ignored);
@@ -44,9 +50,12 @@ async function init(args) {
 
   const agentArg = flag(args, '--agent', 'all');
   const agents = agentArg === 'all' ? ['codex', 'claude'] : agentArg.split(',');
+  const claudeScope = flag(args, '--claude-scope', 'local');
+  try { inst.preflight(agents.map((agent) => ({ agent, root, scope: claudeScope }))); }
+  catch (e) { console.error(`agentreceipt: ${e.message}`); process.exit(1); }
   const binPath = inst.installRuntime();
   console.log(`Config: ${path.join(root, DIR, 'config.json')}`);
-  for (const a of agents) console.log(`Stop hook (${a}): ${inst.install({ agent: a, root, binPath, scope: flag(args, '--claude-scope', 'local') })}`);
+  for (const a of agents) console.log(`Stop hook (${a}): ${inst.install({ agent: a, root, binPath, scope: claudeScope })}`);
   if (agents.includes('codex')) console.log('Codex: open /hooks once in Codex to review and trust the agentreceipt hook.');
   console.log('Done. Your agent now has to show a receipt before it can say "done".');
 }
@@ -66,10 +75,13 @@ async function main() {
     case 'last': return last();
     case 'uninstall': {
       const root = findRoot(process.cwd());
+      let failed = false;
       for (const [a, scope] of [['codex'], ['claude', 'local'], ['claude', 'project'], ['claude', 'user']]) {
-        const f = inst.uninstall({ agent: a, root, scope }); if (f) console.log(`Removed hook from ${f}`);
+        try { const f = inst.uninstall({ agent: a, root, scope }); if (f) console.log(`Removed hook from ${f}`); }
+        catch (e) { failed = true; console.error(`agentreceipt: skipped: ${e.message}`); }
       }
       if (inst.removeExcludes(root)) console.log('Removed agentreceipt block from .git/info/exclude');
+      if (failed) { console.error('agentreceipt: runtime kept because a hook could not be removed.'); process.exitCode = 1; return; }
       inst.removeRuntime();
       console.log(`Removed runtime from ${path.join(inst.homeDir(), 'runtime')}`);
       return;

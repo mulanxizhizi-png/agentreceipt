@@ -5,9 +5,12 @@ const path = require('path');
 
 const PKG_ROOT = path.resolve(__dirname, '..');
 const VERSION = require('../package.json').version;
-const MARK = 'agentreceipt';
+const STATUS_MESSAGE = 'agentreceipt: verifying tests';
 
-function homeDir(env = process.env) { return env.AGENTRECEIPT_HOME || path.join(os.homedir(), '.agentreceipt'); }
+// POSIX shell single-quoting: the only safe way to embed an arbitrary path in sh code.
+function shQuote(v) { return `'${String(v).replace(/'/g, `'\\''`)}'`; }
+
+function homeDir(env = process.env) { return env.AGENTRECEIPT_HOME || process.env.AGENTRECEIPT_HOME || path.join(os.homedir(), '.agentreceipt'); }
 
 // npx caches are temporary, so copy the runtime to a stable place the hooks can point to.
 function installRuntime(env = process.env) {
@@ -31,7 +34,7 @@ function shimPath(env = process.env) { return path.join(homeDir(env), 'bin', 'ag
 function writeShim(target, env = process.env) {
   const p = shimPath(env);
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, `#!/bin/sh\n# agentreceipt hook shim (rewritten by \`agentreceipt init\`)\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(target)} hook --agent "\${1:-codex}"\n`);
+  fs.writeFileSync(p, `#!/bin/sh\n# agentreceipt hook shim (rewritten by \`agentreceipt init\`)\nexec ${shQuote(process.execPath)} ${shQuote(target)} hook --agent "\${1:-codex}"\n`);
   fs.chmodSync(p, 0o755);
   return p;
 }
@@ -41,24 +44,48 @@ function writeShim(target, env = process.env) {
 const HOOK_TIMEOUT = 900;
 
 function hookCommand(shim, agent) {
-  return `${JSON.stringify(shim)} ${agent}`;
+  return `${shQuote(shim)} ${agent}`;
 }
 
-function readJson(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return {}; } }
+// Missing/empty file -> {}. Anything else that isn't a JSON object -> throw, so we never overwrite a
+// config we couldn't understand.
+function readJsonStrict(p) {
+  let text;
+  try { text = fs.readFileSync(p, 'utf8'); } catch (e) { if (e.code === 'ENOENT') return {}; throw e; }
+  if (!text.trim()) return {};
+  let doc;
+  try { doc = JSON.parse(text); } catch (e) { throw new Error(`${p} is not valid JSON (${e.message}). Fix or move it, then re-run; nothing was changed.`); }
+  if (!doc || typeof doc !== 'object' || Array.isArray(doc)) throw new Error(`${p} is not a JSON object; nothing was changed.`);
+  if (doc.hooks !== undefined && (typeof doc.hooks !== 'object' || Array.isArray(doc.hooks) || doc.hooks === null)) throw new Error(`${p}: "hooks" is not an object; nothing was changed.`);
+  if (doc.hooks && doc.hooks.Stop !== undefined && !Array.isArray(doc.hooks.Stop)) throw new Error(`${p}: "hooks.Stop" is not an array; nothing was changed.`);
+  return doc;
+}
+
+// Identify our own hook by exact structure: a command handler carrying our statusMessage whose command is
+// exactly a shim invocation (current or older quoting) or a pre-0.1.0 runtime invocation.
+const MANAGED_COMMANDS = [
+  /^'(?:[^']|'\\'')*agentreceipt-hook' (codex|claude)$/,
+  /^"[^"]*agentreceipt-hook" (codex|claude)$/,
+  /^"[^"]*" "[^"]*\/\.agentreceipt\/runtime\/[^"/]+\/bin\/agentreceipt\.js" hook --agent (codex|claude)$/,
+];
+function isManaged(h) {
+  return !!h && h.type === 'command' && h.statusMessage === STATUS_MESSAGE && typeof h.command === 'string' &&
+    MANAGED_COMMANDS.some((re) => re.test(h.command));
+}
 
 // Add (or replace) our Stop hook in a hooks-style JSON doc. Same shape for Codex hooks.json and Claude settings.json.
 function upsertStopHook(doc, command, timeoutSec) {
   doc.hooks = doc.hooks || {};
-  const groups = (doc.hooks.Stop || []).map((g) => ({ ...g, hooks: (g.hooks || []).filter((h) => !String(h.command || '').includes(MARK)) }))
+  const groups = (doc.hooks.Stop || []).map((g) => ({ ...g, hooks: (g.hooks || []).filter((h) => !isManaged(h)) }))
     .filter((g) => g.hooks.length);
-  groups.push({ hooks: [{ type: 'command', command, timeout: timeoutSec, statusMessage: 'agentreceipt: verifying tests' }] });
+  groups.push({ hooks: [{ type: 'command', command, timeout: timeoutSec, statusMessage: STATUS_MESSAGE }] });
   doc.hooks.Stop = groups;
   return doc;
 }
 
 function removeStopHook(doc) {
   if (!doc.hooks || !doc.hooks.Stop) return doc;
-  doc.hooks.Stop = doc.hooks.Stop.map((g) => ({ ...g, hooks: (g.hooks || []).filter((h) => !String(h.command || '').includes(MARK)) })).filter((g) => g.hooks.length);
+  doc.hooks.Stop = doc.hooks.Stop.map((g) => ({ ...g, hooks: (g.hooks || []).filter((h) => !isManaged(h)) })).filter((g) => g.hooks.length);
   if (!doc.hooks.Stop.length) delete doc.hooks.Stop;
   if (!Object.keys(doc.hooks).length) delete doc.hooks;
   return doc;
@@ -124,31 +151,52 @@ function removeExcludes(root) {
 const REPO_EXCLUDES = ['.agentreceipt/receipts/', '.agentreceipt/state/'];
 const CLAUDE_LOCAL = '.claude/settings.local.json';
 
-function writeHooks(file, doc) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
+// Before changing an existing settings file, keep a copy outside the project (~/.agentreceipt/backups),
+// then write atomically.
+function backupFile(file, env = process.env) {
+  if (!fs.existsSync(file)) return null;
+  const dir = path.join(homeDir(env), 'backups');
+  fs.mkdirSync(dir, { recursive: true });
+  const name = `${path.resolve(file).replace(/[^A-Za-z0-9._-]+/g, '_').replace(/^_+/, '')}.${new Date().toISOString().replace(/[:.]/g, '-')}.bak`;
+  const dest = path.join(dir, name);
+  fs.copyFileSync(file, dest);
+  return dest;
 }
+function writeHooks(file, doc, env = process.env) {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  backupFile(file, env);
+  const tmp = `${file}.agentreceipt-${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n');
+  fs.renameSync(tmp, file);
+}
+
+function targetFile(agent, root, scope, env) { return agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env); }
+// Validate every file init will touch before writing anything. Throws on the first problem.
+function preflight(targets) { for (const t of targets) readJsonStrict(targetFile(t.agent, t.root, t.scope || 'local', t.env || process.env)); }
 
 function install({ agent, root, binPath, scope = 'local', env = process.env }) {
   if (agent === 'claude' && scope === 'project') throw new Error('Refusing to write the hook to committed .claude/settings.json; use --claude-scope local or user');
-  const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env);
+  const file = targetFile(agent, root, scope, env);
+  const doc = readJsonStrict(file); // throws before any write if the file is malformed
   if (agent === 'claude' && scope === 'local') addExcludes(root, [CLAUDE_LOCAL]);
-  writeHooks(file, upsertStopHook(readJson(file), hookCommand(binPath, agent), HOOK_TIMEOUT));
+  writeHooks(file, upsertStopHook(doc, hookCommand(binPath, agent), HOOK_TIMEOUT), env);
   return file;
 }
 
 function uninstall({ agent, root, scope = 'local', env = process.env }) {
-  const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env);
+  const file = targetFile(agent, root, scope, env);
   try { fs.unlinkSync(file + '.agentreceipt.bak'); } catch {} // left by versions <= 0.1.0
   if (!fs.existsSync(file)) return null;
-  const before = JSON.stringify(readJson(file));
-  const doc = removeStopHook(readJson(file));
+  const original = readJsonStrict(file); // malformed -> throw, file left untouched
+  const before = JSON.stringify(original);
+  const doc = removeStopHook(JSON.parse(before));
   if (JSON.stringify(doc) === before) return null; // nothing of ours there; leave the file untouched
   if (!Object.keys(doc).length) {
+    backupFile(file, env);
     fs.unlinkSync(file);
     // drop a project .claude/ dir we created and left empty
     if (agent === 'claude' && scope !== 'user') { try { fs.rmdirSync(path.dirname(file)); } catch {} }
-  } else fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
+  } else writeHooks(file, doc, env);
   return file;
 }
 
@@ -159,4 +207,4 @@ function removeRuntime(env = process.env) {
   try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
 }
 
-module.exports = { HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };
+module.exports = { shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };

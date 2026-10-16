@@ -48,7 +48,7 @@ test('claude user scope writes CLAUDE_CONFIG_DIR/settings.json; uninstall leaves
   assert.equal(f, path.join(cfgDir, 'settings.json'));
   const doc = JSON.parse(fs.readFileSync(f, 'utf8'));
   assert.equal(doc.theme, 'dark'); assert.equal(doc.hooks.Stop[0].hooks[0].type, 'command');
-  assert.equal(doc.hooks.Stop[0].hooks[0].command, '"/s/agentreceipt-hook" claude');
+  assert.equal(doc.hooks.Stop[0].hooks[0].command, "'/s/agentreceipt-hook' claude");
   assert.equal(doc.hooks.Stop[0].matcher, undefined);
   inst.uninstall({ agent: 'claude', root: '/unused', scope: 'user', env });
   assert.deepEqual(JSON.parse(fs.readFileSync(f, 'utf8')), { theme: 'dark' });

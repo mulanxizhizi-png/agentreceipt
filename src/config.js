@@ -23,10 +23,30 @@ function findRoot(cwd) {
 
 function configPath(root) { return path.join(root, DIR, 'config.json'); }
 
+class ConfigError extends Error {}
+
+// Returns a list of problems (empty = valid). maxBlocks: finite integer >= 0 (0 = never block, only receipts).
+// timeoutSec: finite number > 0. testCommand: non-empty string.
+function validateConfig(cfg) {
+  const errs = [];
+  if (typeof cfg.testCommand !== 'string' || !cfg.testCommand.trim()) errs.push('testCommand must be a non-empty string');
+  if (typeof cfg.maxBlocks !== 'number' || !Number.isInteger(cfg.maxBlocks) || cfg.maxBlocks < 0) errs.push(`maxBlocks must be an integer >= 0 (got ${JSON.stringify(cfg.maxBlocks)})`);
+  if (typeof cfg.timeoutSec !== 'number' || !Number.isFinite(cfg.timeoutSec) || cfg.timeoutSec <= 0) errs.push(`timeoutSec must be a number > 0 (got ${JSON.stringify(cfg.timeoutSec)})`);
+  return errs;
+}
+
+// Strict number parsing for CLI flags: '3' -> 3, 'abc'/'' -> NaN (so validation rejects it).
+function parseNum(v) { return typeof v === 'number' ? v : /^\s*-?\d+(\.\d+)?\s*$/.test(String(v)) ? Number(v) : NaN; }
+
 function loadConfig(root) {
   const p = configPath(root);
   if (!fs.existsSync(p)) return null;
-  return { ...DEFAULTS, ...JSON.parse(fs.readFileSync(p, 'utf8')) };
+  let raw;
+  try { raw = JSON.parse(fs.readFileSync(p, 'utf8')); } catch (e) { throw new ConfigError(`${p}: invalid JSON (${e.message})`); }
+  const cfg = { ...DEFAULTS, ...raw };
+  const errs = validateConfig(cfg);
+  if (errs.length) throw new ConfigError(`${p}: ${errs.join('; ')}`);
+  return cfg;
 }
 
 function saveConfig(root, cfg) {
@@ -34,4 +54,4 @@ function saveConfig(root, cfg) {
   fs.writeFileSync(configPath(root), JSON.stringify({ ...DEFAULTS, ...cfg }, null, 2) + '\n');
 }
 
-module.exports = { DIR, DEFAULTS, findRoot, loadConfig, saveConfig, configPath };
+module.exports = { ConfigError, validateConfig, parseNum, DIR, DEFAULTS, findRoot, loadConfig, saveConfig, configPath };

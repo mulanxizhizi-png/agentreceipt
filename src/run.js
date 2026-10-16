@@ -7,7 +7,9 @@ const TAIL = 4000;
 function runTests(command, cwd, timeoutSec) {
   return new Promise((resolve) => {
     const start = Date.now();
-    const child = spawn(command, { cwd, shell: true, detached: process.platform !== 'win32', env: { ...process.env, CI: '1' } });
+    let child;
+    try { child = spawn(command, { cwd, shell: true, detached: process.platform !== 'win32', env: { ...process.env, CI: '1' } }); }
+    catch (e) { resolve({ exitCode: null, timedOut: false, spawnError: String(e), durationMs: 0, outputTail: String(e) }); return; }
     let out = '';
     const add = (b) => { out += b.toString(); if (out.length > TAIL * 4) out = out.slice(-TAIL * 2); };
     child.stdout.on('data', add); child.stderr.on('data', add);
@@ -20,7 +22,7 @@ function runTests(command, cwd, timeoutSec) {
       clearTimeout(timer);
       resolve({ exitCode: timedOut ? null : code, timedOut, durationMs: Date.now() - start, outputTail: out.slice(-TAIL) });
     });
-    child.on('error', (e) => { clearTimeout(timer); resolve({ exitCode: 127, timedOut: false, durationMs: Date.now() - start, outputTail: String(e) }); });
+    child.on('error', (e) => { clearTimeout(timer); resolve({ exitCode: null, timedOut: false, spawnError: String(e), durationMs: Date.now() - start, outputTail: String(e) }); });
   });
 }
 

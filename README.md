@@ -16,6 +16,8 @@ In your project (git repo):
 npx github:mulanxizhizi-png/agentreceipt init
 ```
 
+`init` never overwrites a settings file it can't parse: it stops with an error and changes nothing. Before modifying an existing file, it saves a copy to `~/.agentreceipt/backups/`.
+
 `init` finds your test command (`package.json` test via npm/pnpm/yarn/bun, pytest, cargo, go, `make test`), or asks you for it. It writes `.agentreceipt/config.json` and installs the hook. The runtime is copied to `~/.agentreceipt/runtime/<version>/` (behind a stable shim in `~/.agentreceipt/bin/`) so the hook keeps working after npx clears its cache. Requires Node 18 or newer. No dependencies.
 
 ## Codex: trust the hook once
@@ -55,8 +57,8 @@ agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope lo
 | key | default | meaning |
 | --- | --- | --- |
 | `testCommand` | detected | shell command run from the repo root; exit 0 = pass |
-| `timeoutSec` | 300 | longer runs are killed and count as a failure |
-| `maxBlocks` | 3 | times per turn the agent can be sent back before it's allowed to stop (RED) |
+| `timeoutSec` | 300 | longer runs are killed and count as a failure. Number > 0 |
+| `maxBlocks` | 3 | times per turn the agent can be sent back before it's allowed to stop (RED). Integer ≥ 0; 0 = receipts only, never block |
 
 ## What goes in git
 
@@ -67,7 +69,7 @@ agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope lo
 
 Every check writes `.agentreceipt/receipts/<timestamp>-<status>.json` (not committed) and prints a readable receipt. `agentreceipt last` shows the latest one.
 
-Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hit, stopped with failing tests).
+Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hit, stopped with failing tests), `error` (agentreceipt itself couldn't verify, e.g. invalid config, a test command that can't start or isn't found (exit 127), or receipts that can't be written; the stop is allowed and a warning is shown).
 
 ```json
 {

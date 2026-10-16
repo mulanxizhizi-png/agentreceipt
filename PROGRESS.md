@@ -30,3 +30,13 @@
 - **免费 GitHub Action 做好了**（仓库根目录 action.yml，零依赖）：每个 PR 跑一遍测试，生成同一格式的收据（agent: ci，用 PR 标题和描述当「声称」），在 PR 下发一条评论并在每次推送后原地更新，测试没过就让检查失败。真实测试：在临时私有仓库 mulanxizhizi-png/agentreceipt-action-test 开了一个改坏代码的 PR → 检查失败，评论显示 RED；推送修复 → 检查通过，同一条评论更新为 PASS（始终只有 1 条评论）。证据在 e2e/action/。
   - 临时仓库**还没删**：gh 登录缺少 delete_repo 权限，需要 Zjing 手动删，或者授权 delete_repo 后由我来删。
 - 待办：init 交互体验打磨；Zjing 网络方便时 npm publish。
+
+## v0.1.1（10 月 16 日，按外部 Codex 评审修复，第一批）
+- 已有的 hooks.json / settings 文件如果是坏的 JSON，init 直接报错退出，一个字节都不改；修改前先把原文件备份到 ~/.agentreceipt/backups（不留在项目里）。
+- 启动脚本和 hook 命令改用 shell 单引号转义：路径里有空格、$、$(...)、反引号、引号也不会被执行。
+- 卸载时只删我们自己的 hook（命令格式和 statusMessage 都要精确匹配），别人的 hook 即使名字里带 agentreceipt 也不动。
+- npm test 改成显式的 test/*.test.js（修复 Node 24 上跑不起来）；engines 统一为 node>=18。
+- maxBlocks / timeout 填了非法值（-1、abc 等）：init 报错；hook 生成 error 收据并给出可见警告，不再悄悄标红放行。
+- hook 自身出错（配置坏了、收据写不进去、测试命令启动不了或找不到）：仍然放行，不困住 agent，但会尽量写一张 error 收据，并在 systemMessage 和 stderr 里给出警告。
+- 会话 id 改为哈希后做文件名，不同会话不会撞上；同一会话的并发 Stop 加锁串行，计数正确。
+- 单元测试 43 个全过；外部探针复测：上述 7 项全部转为已修复，中文路径和 bun.lock 留到第二批。
