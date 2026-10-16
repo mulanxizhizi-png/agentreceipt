@@ -1,33 +1,78 @@
 # agentreceipt
 
-Your coding agent says "done". Make it show a receipt.
+**Your coding agent says "done". Make it show a receipt.**
 
-agentreceipt installs a **Stop hook** for Codex (and Claude Code). When the agent tries to finish, it runs your tests and checks the git diff. If tests fail, the agent is sent back to work with the failure output. After a max number of blocks (default 3) it is allowed to stop and the receipt is marked **RED**.
+agentreceipt adds a Stop hook to your coding agent. When the agent tries to finish, the hook runs your tests and checks the git diff. If the tests fail, the agent is sent back to work with the failure output. After a set number of blocks it's allowed to stop, and the receipt is marked **RED**.
+
+![red receipt](e2e/red-receipt.png)
+
+*Real output from Codex 0.163.0: the agent claimed "all tests pass", got blocked once, then stopped with the tests still failing.*
+
+## Install
+
+In your project (git repo):
 
 ```
 npx github:mulanxizhizi-png/agentreceipt init
 ```
 
-- Auto-detects the test command (`package.json` test, pytest, cargo, go, make). Otherwise asks, or pass `--test "<cmd>"`.
-- Options: `--agent codex|claude|all`, `--timeout 300` (seconds), `--max-blocks 3`.
-- Codex: hook goes to `~/.codex/hooks.json` (global; it no-ops in repos without `.agentreceipt/config.json`). Open `/hooks` in Codex once to trust it.
-- Claude Code: hook goes to `.claude/settings.json` in the repo.
-- Every check writes a versioned JSON receipt to `.agentreceipt/receipts/` and prints a readable one.
-- Flags when the agent edited test files.
+`init` finds your test command (`package.json` test via npm/pnpm/yarn/bun, pytest, cargo, go, `make test`), or asks you for it. It writes `.agentreceipt/config.json` and installs the hook. The runtime is copied to `~/.agentreceipt/runtime/` so the hook keeps working after npx clears its cache. Requires Node 18 or newer. No dependencies.
 
-`agentreceipt last` prints the latest receipt; `agentreceipt uninstall` removes the hooks.
+## Codex: trust the hook once
+
+Codex won't run a new hook until you trust it. The hook goes to `~/.codex/hooks.json` (user level). In repos without `.agentreceipt/config.json` it does nothing. The next time you start `codex`:
+
+1. Codex shows **"Hooks need review"**. Pick **1. Review hooks**. (2. *Trust all and continue* also works.)
+2. Select the `Stop` row, press **Enter**, check the command (it points at `~/.agentreceipt/runtime/.../agentreceipt.js hook --agent codex`), and press **t** to trust it.
+3. Press **Esc** twice and work as normal.
+
+You can review it again anytime with `/hooks`. Codex re-asks for trust whenever the hook command changes, for example after upgrading agentreceipt.
+
+## Claude Code (experimental, untested)
+
+`init` also writes a Stop hook to `.claude/settings.json` in the repo. It uses the same JSON protocol Claude Code documents, but it hasn't been tested against a live Claude Code yet. To install only one agent: `--agent codex` or `--agent claude`.
+
+## Options
 
 ```
---------------------------------------------
- AGENT RECEIPT
---------------------------------------------
- Status:   BLOCKED  agent sent back to work
- Agent:    codex
- Claimed:  Done, all tests pass.
- Tests:    npm test -> failed (exit 1) in 0.4s
- Diff:     0 files, +0 -0
- Blocks:   1/3
---------------------------------------------
+agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--timeout 300] [--max-blocks 3]
 ```
 
-MIT licensed. Zero dependencies, Node >= 18.
+`.agentreceipt/config.json`:
+
+| key | default | meaning |
+| --- | --- | --- |
+| `testCommand` | detected | shell command run from the repo root; exit 0 = pass |
+| `timeoutSec` | 300 | longer runs are killed and count as a failure |
+| `maxBlocks` | 3 | times per session the agent can be sent back before it's allowed to stop (RED) |
+
+## Receipts
+
+Every check writes `.agentreceipt/receipts/<timestamp>-<status>.json`, which is gitignored, and prints a readable receipt. `agentreceipt last` shows the latest one.
+
+Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hit, stopped with failing tests).
+
+```json
+{
+  "schemaVersion": 1,
+  "agent": "codex",
+  "status": "red",
+  "decision": "allow",
+  "claim": "Done, all tests pass.",
+  "tests": { "command": "npm test", "passed": false, "exitCode": 1, "timedOut": false, "durationMs": 412, "outputTail": "..." },
+  "diff": { "filesChanged": 0, "insertions": 0, "deletions": 0, "files": [], "testFilesChanged": [] },
+  "blocks": { "count": 1, "max": 1 }
+}
+```
+
+`testFilesChanged` flags agents that edit the tests instead of the code. The block message warns them too.
+
+## Uninstall
+
+```
+npx github:mulanxizhizi-png/agentreceipt uninstall
+```
+
+This removes the hooks from `~/.codex/hooks.json` and `.claude/settings.json`, and deletes `~/.agentreceipt/runtime`. Delete `.agentreceipt/` in your repo yourself if you don't want the receipts.
+
+MIT licensed.
