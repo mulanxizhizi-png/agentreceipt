@@ -75,19 +75,54 @@ function claudeSettingsPath(root, scope = 'local', env = process.env) {
   return path.join(root, '.claude', 'settings.local.json');
 }
 
-// Make sure .claude/settings.local.json is ignored by git. Uses .git/info/exclude (local, never committed),
-// so init doesn't add a .gitignore change to the user's repo. (Claude Code does this itself only when *it* writes the file.)
-function ensureGitignored(root, rel = '.claude/settings.local.json') {
+// Local git ignores live in .git/info/exclude (never committed, so the user's repo isn't changed),
+// inside a marked block that uninstall removes without touching lines the user wrote themselves.
+const BLOCK_START = '# >>> agentreceipt (managed; removed by `agentreceipt uninstall`)';
+const BLOCK_END = '# <<< agentreceipt';
+
+function excludePath(root) {
   const { execFileSync } = require('child_process');
-  let gitDir;
-  try { gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return false; }
-  try { execFileSync('git', ['check-ignore', '-q', rel], { cwd: root, stdio: 'ignore' }); return false; } catch { /* not ignored */ }
-  const ex = path.join(gitDir, 'info', 'exclude');
+  try {
+    const gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return path.join(gitDir, 'info', 'exclude');
+  } catch { return null; }
+}
+
+// Split exclude file into [before, blockLines, after]; block absent => blockLines null.
+function splitBlock(text) {
+  const lines = text.split('\n');
+  const i = lines.indexOf(BLOCK_START);
+  const j = i >= 0 ? lines.indexOf(BLOCK_END, i + 1) : -1;
+  if (i < 0 || j < 0) return [lines, null, []];
+  return [lines.slice(0, i), lines.slice(i + 1, j), lines.slice(j + 1)];
+}
+
+function addExcludes(root, entries) {
+  const ex = excludePath(root);
+  if (!ex) return false;
   fs.mkdirSync(path.dirname(ex), { recursive: true });
   const cur = fs.existsSync(ex) ? fs.readFileSync(ex, 'utf8') : '';
-  fs.writeFileSync(ex, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + rel + '\n');
+  const [before, block, after] = splitBlock(cur);
+  const merged = [...new Set([...(block || []), ...entries])];
+  let head = before.join('\n');
+  if (block === null) head = head.replace(/\n*$/, '');
+  const parts = [head ? head + '\n' : '', [BLOCK_START, ...merged, BLOCK_END].join('\n') + '\n', after.join('\n').replace(/^\n+/, '')];
+  fs.writeFileSync(ex, parts.join(''));
   return true;
 }
+
+function removeExcludes(root) {
+  const ex = excludePath(root);
+  if (!ex || !fs.existsSync(ex)) return false;
+  const [before, block, after] = splitBlock(fs.readFileSync(ex, 'utf8'));
+  if (block === null) return false;
+  const out = [...before, ...after].join('\n').replace(/\n{3,}/g, '\n\n');
+  fs.writeFileSync(ex, out.replace(/\n*$/, '\n') === '\n' ? '' : out.replace(/\n*$/, '\n'));
+  return true;
+}
+
+const REPO_EXCLUDES = ['.agentreceipt/receipts/', '.agentreceipt/state/'];
+const CLAUDE_LOCAL = '.claude/settings.local.json';
 
 function writeHooks(file, doc) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -97,7 +132,7 @@ function writeHooks(file, doc) {
 function install({ agent, root, binPath, scope = 'local', env = process.env }) {
   if (agent === 'claude' && scope === 'project') throw new Error('Refusing to write the hook to committed .claude/settings.json; use --claude-scope local or user');
   const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env);
-  if (agent === 'claude' && scope === 'local') ensureGitignored(root);
+  if (agent === 'claude' && scope === 'local') addExcludes(root, [CLAUDE_LOCAL]);
   writeHooks(file, upsertStopHook(readJson(file), hookCommand(binPath, agent), HOOK_TIMEOUT));
   return file;
 }
@@ -124,4 +159,4 @@ function removeRuntime(env = process.env) {
   try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
 }
 
-module.exports = { HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, ensureGitignored };
+module.exports = { HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };

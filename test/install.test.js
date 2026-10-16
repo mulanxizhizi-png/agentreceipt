@@ -30,7 +30,9 @@ test('claude default install writes .claude/settings.local.json, gitignores it, 
   execFileSync('git', ['check-ignore', '-q', '.claude/settings.local.json'], { cwd: root }); // throws if not ignored
   inst.install({ agent: 'claude', root, binPath: '/b/agentreceipt-hook' }); // idempotent gitignore
   assert.equal(fs.existsSync(path.join(root, '.gitignore')), false); // repo untouched
-  assert.equal(fs.readFileSync(path.join(root, '.git/info/exclude'), 'utf8').split('\n').filter((l) => l === '.claude/settings.local.json').length, 1);
+  const ex = fs.readFileSync(path.join(root, '.git/info/exclude'), 'utf8');
+  assert.equal(ex.split('\n').filter((l) => l === '.claude/settings.local.json').length, 1);
+  assert.ok(ex.includes(inst.BLOCK_START) && ex.includes(inst.BLOCK_END));
   assert.throws(() => inst.install({ agent: 'claude', root, binPath: '/b/x', scope: 'project' }));
 });
 test('uninstall cleans settings.local.json and legacy settings.json entries', () => {
@@ -66,4 +68,38 @@ test('hook command text is version-independent; shim dispatches to current runti
   const a = inst.upsertStopHook({}, inst.hookCommand(shim, 'codex'), inst.HOOK_TIMEOUT);
   const b = inst.upsertStopHook({}, inst.hookCommand(inst.installRuntime(env), 'codex'), inst.HOOK_TIMEOUT);
   assert.deepEqual(a, b);
+});
+
+test('exclude block: merges entries, preserves user lines, uninstall removes only the block', () => {
+  const { tmpRepo } = require('./helpers');
+  const root = tmpRepo({});
+  const ex = path.join(root, '.git/info/exclude');
+  const user = '# my stuff\n.claude/settings.local.json\n*.log\n';
+  fs.writeFileSync(ex, user);
+  inst.addExcludes(root, inst.REPO_EXCLUDES);
+  inst.addExcludes(root, ['.claude/settings.local.json']);
+  inst.addExcludes(root, inst.REPO_EXCLUDES); // idempotent
+  const txt = fs.readFileSync(ex, 'utf8');
+  assert.equal(txt.split(inst.BLOCK_START).length, 2, 'exactly one block');
+  assert.ok(txt.startsWith(user));
+  const block = txt.slice(txt.indexOf(inst.BLOCK_START)).split('\n');
+  assert.deepEqual(block.slice(1, 4), ['.agentreceipt/receipts/', '.agentreceipt/state/', '.claude/settings.local.json']);
+  assert.equal(inst.removeExcludes(root), true);
+  assert.equal(fs.readFileSync(ex, 'utf8'), user, 'user lines, including the identical one, survive');
+  assert.equal(inst.removeExcludes(root), false);
+});
+test('init leaves git status clean except committable .agentreceipt/config.json + .gitignore; uninstall restores exclude', () => {
+  const { tmpRepo } = require('./helpers'); const { execFileSync } = require('child_process');
+  const root = tmpRepo({ 'package.json': '{"scripts":{"test":"node -e 0"}}' });
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'arh-'));
+  const env = { ...process.env, HOME: home, AGENTRECEIPT_HOME: path.join(home, '.agentreceipt'), CODEX_HOME: path.join(home, '.codex') };
+  const exBefore = fs.readFileSync(path.join(root, '.git/info/exclude'), 'utf8');
+  const bin = path.join(__dirname, '..', 'bin', 'agentreceipt.js');
+  execFileSync(process.execPath, [bin, 'init', '--agent', 'claude'], { cwd: root, env, stdio: 'ignore' });
+  execFileSync('bash', ['-c', `echo '{"cwd":"${root}","session_id":"s"}' | "${path.join(home, '.agentreceipt/bin/agentreceipt-hook')}" claude`], { env, stdio: 'ignore' });
+  assert.ok(fs.readdirSync(path.join(root, '.agentreceipt/receipts')).length >= 1);
+  const status = execFileSync('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root }).toString().trim().split('\n').sort();
+  assert.deepEqual(status, ['?? .agentreceipt/.gitignore', '?? .agentreceipt/config.json']);
+  execFileSync(process.execPath, [bin, 'uninstall'], { cwd: root, env, stdio: 'ignore' });
+  assert.equal(fs.readFileSync(path.join(root, '.git/info/exclude'), 'utf8'), exBefore);
 });

@@ -37,7 +37,10 @@ async function init(args) {
   };
   saveConfig(root, cfg);
   // keep receipts/state out of git by default; config stays committable
+  // .agentreceipt/.gitignore travels with a committed config.json (teammates' receipts stay ignored);
+  // .git/info/exclude keeps `git status` clean right away for this clone.
   fs.writeFileSync(path.join(root, DIR, '.gitignore'), 'receipts/\nstate/\n');
+  inst.addExcludes(root, inst.REPO_EXCLUDES);
 
   const agentArg = flag(args, '--agent', 'all');
   const agents = agentArg === 'all' ? ['codex', 'claude'] : agentArg.split(',');
@@ -66,6 +69,7 @@ async function main() {
       for (const [a, scope] of [['codex'], ['claude', 'local'], ['claude', 'project'], ['claude', 'user']]) {
         const f = inst.uninstall({ agent: a, root, scope }); if (f) console.log(`Removed hook from ${f}`);
       }
+      if (inst.removeExcludes(root)) console.log('Removed agentreceipt block from .git/info/exclude');
       inst.removeRuntime();
       console.log(`Removed runtime from ${path.join(inst.homeDir(), 'runtime')}`);
       return;
