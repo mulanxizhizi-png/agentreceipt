@@ -13,7 +13,7 @@ agentreceipt adds a Stop hook to your coding agent. When the agent tries to fini
 In your project (git repo):
 
 ```
-npx github:mulanxizhizi-png/agentreceipt#v0.1.3 init
+npx github:mulanxizhizi-png/agentreceipt#v0.1.2 init
 ```
 
 `init` never overwrites a settings file it can't parse: it stops with an error and changes nothing. Before modifying an existing file, it saves a copy to `~/.agentreceipt/backups/`.
@@ -148,7 +148,7 @@ Outputs: `status` (`green`/`red`) and `receipt-path`. The receipt is also added 
 ## Uninstall
 
 ```
-npx github:mulanxizhizi-png/agentreceipt#v0.1.3 uninstall
+npx github:mulanxizhizi-png/agentreceipt#v0.1.2 uninstall
 ```
 
 By default this only affects the **current project**: it removes the hook from `.claude/settings.local.json` (and any legacy entry in `.claude/settings.json`) and the agentreceipt block in `.git/info/exclude`.
