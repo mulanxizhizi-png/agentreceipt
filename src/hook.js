@@ -4,7 +4,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { findRoot, loadConfig, configFingerprint, DIR } = require('./config');
 const { runTests } = require('./run');
-const { diffSummary, codeFingerprint, headSha, isAncestor, git: gitCmd } = require('./git');
+const { setIgnore, diffSummary, codeFingerprint, headSha, isAncestor, git: gitCmd } = require('./git');
 const { buildReceipt, writeReceipt, formatReceipt, receiptName } = require('./receipt');
 const { recordUndo } = require('./undo');
 const { prepareEnv } = require('./pyenv');
@@ -54,6 +54,7 @@ async function handleStop(input, { agent = 'codex' } = {}) {
   let cfg;
   try { cfg = loadConfig(root); } catch (e) { return errorResult({ root, agent, input, error: e }); }
   if (!cfg) return { output: {}, skipped: true }; // agentreceipt not set up in this repo
+  setIgnore(cfg.ignore);
 
   const sessionId = input.session_id;
   try {

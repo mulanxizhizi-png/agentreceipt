@@ -61,6 +61,7 @@ agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope lo
 | `maxBlocks` | 3 | times per turn the agent can be sent back before it's allowed to stop (RED). Integer ≥ 0; 0 = receipts only, never block |
 | `cleanEnv` | false | verify in a cleaner environment. Python: point `PYTHONPYCACHEPREFIX` at a fresh empty temp dir and set `PYTHONDONTWRITEBYTECODE=1`, so a stale `__pycache__/*.pyc` can't make broken source pass |
 | `criteriaFiles` | none | extra globs (`*`, `**`, `?`) for files that define your checks, e.g. `["ci/**/*.sh"]`. Changes to them add the "verification criteria changed" notice |
+| `ignore` | none | extra globs for generated files to leave out of change detection, e.g. `["build/", "*.log"]`. Always ignored by default: `__pycache__/`, `*.pyc`, `*.pyo`, `.pytest_cache/`, `.mypy_cache/`, `.ruff_cache/`, `.tox/`, `.nox/`, `*.egg-info/`, `node_modules/.cache`, `.coverage`, `coverage/`, `htmlcov/`, `.nyc_output` |
 
 ## What goes in git
 

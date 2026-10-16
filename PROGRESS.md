@@ -1,5 +1,11 @@
 # agentreceipt 开发进度
 
+## v0.1.4（10 月 16 日晚，开发和调试）：生成产物不再算作改动
+- **部署复测发现的问题**：Python 项目如果没在 `.gitignore` 里忽略 `__pycache__`，跑测试会生成 `__pycache__/*.pyc`，代码指纹在测试前后不一致，第一次测试明明通过也被拦下。
+- **修复**：变化检测（测试中代码变化的指纹、改动文件统计、测试文件改动、验证标准变化提示）默认忽略生成产物：`__pycache__/`、`*.pyc`、`*.pyo`、`.pytest_cache/`、`.mypy_cache/`、`.ruff_cache/`、`.tox/`、`.nox/`、`*.egg-info/`、`node_modules/.cache`、`.coverage`、`coverage/`、`htmlcov/`、`.nyc_output`。项目可以用配置项 `ignore`（glob 数组）再加自己的规则，格式不对时会给出 error 收据。
+- **回归测试** `test/generated.test.js`：复现部署的场景（Python 项目、没有 `.gitignore`、测试时生成 pyc 和覆盖率文件），第一次就是绿色、不拦截；在旧代码上这个测试会失败。另有默认规则和 `ignore` 配置的测试。全部 77 个测试连跑 10 次都通过。
+- 版本号改为 0.1.4；v0.1.3 仍以 `08869ef` 为准，这次只追加了新提交。
+
 ## v0.1.3（10 月 16 日晚，开发和调试）：Python 文档索引测试报告的两个发现
 - **验证入口文件纳入“验证标准已变化”提示（报告场景 13）**：新增 `Makefile`、`*.mk`、`justfile`、`noxfile.py`、`conftest.py`、`scripts/test*`、`Taskfile.yml`，原有的 `package.json`、`tox.ini`、`pytest.ini`、`pyproject.toml`、`setup.cfg` 也都在内。项目还可以在配置里用 `criteriaFiles`（glob）声明自己的验证规则文件。这只是提示，不拦截。报告里“把 Makefile 的 test 目标换成 echo”那种情况，现在收据还是绿色，但会提示“验证标准已变化，需复核”。
 - **可选的干净环境 `cleanEnv`（报告场景 12）**：开启后，验证时把 `PYTHONPYCACHEPREFIX` 指向一个新建的空临时目录，并设置 `PYTHONDONTWRITEBYTECODE=1`，旧的 pyc 就骗不过去了。复现“旧时间戳 pyc 和坏源码并存”：不开时是绿色（已写成测试，作为已知缺口的记录），开了以后变成 blocked/red。Python 项目的收据会记下解释器路径和版本。

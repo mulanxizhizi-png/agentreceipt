@@ -33,6 +33,7 @@ function validateConfig(cfg) {
   if (typeof cfg.maxBlocks !== 'number' || !Number.isInteger(cfg.maxBlocks) || cfg.maxBlocks < 0) errs.push(`maxBlocks must be an integer >= 0 (got ${JSON.stringify(cfg.maxBlocks)})`);
   if (typeof cfg.timeoutSec !== 'number' || !Number.isFinite(cfg.timeoutSec) || cfg.timeoutSec <= 0) errs.push(`timeoutSec must be a number > 0 (got ${JSON.stringify(cfg.timeoutSec)})`);
   if (cfg.criteriaFiles !== undefined && !(Array.isArray(cfg.criteriaFiles) && cfg.criteriaFiles.every((g) => typeof g === 'string' && g.trim()))) errs.push('criteriaFiles must be an array of glob strings');
+  if (cfg.ignore !== undefined && !(Array.isArray(cfg.ignore) && cfg.ignore.every((g) => typeof g === 'string' && g.trim()))) errs.push('ignore must be an array of glob strings');
   if (cfg.cleanEnv !== undefined && typeof cfg.cleanEnv !== 'boolean') errs.push('cleanEnv must be true or false');
   return errs;
 }

@@ -10,6 +10,19 @@ const TEST_FILE = /(^|\/)(tests?|__tests__|spec)\/|[._-](test|spec)\.[a-z]+$|^te
 const OWN = [/^\.agentreceipt\//, /^\.claude\/settings(\.local)?\.json$/];
 const isOwn = (f) => OWN.some((re) => re.test(f));
 
+// Generated artifacts (bytecode, tool caches, coverage output). Running the tests creates them, so they
+// must never count as the agent's work: not in changed files, test-file changes, criteria notices or the
+// code fingerprint. Without this, a Python repo with no .gitignore had its first passing run blocked
+// because __pycache__/*.pyc appeared during the run. Extra globs: config.ignore.
+const GENERATED = /(^|\/)(__pycache__|\.pytest_cache|\.mypy_cache|\.ruff_cache|\.tox|\.nox|[^/]+\.egg-info|node_modules\/\.cache|coverage|htmlcov|\.nyc_output)\/|\.py[co]$|(^|\/)\.coverage(\.[^/]*)?$/;
+let extraIgnore = [];
+function setIgnore(globs) {
+  const { globRe } = require('./receipt');
+  extraIgnore = (Array.isArray(globs) ? globs : []).map((g) => { g = g.replace(/^\.\//, ''); return g.endsWith('/') ? [globRe(g + '**'), globRe('**/' + g + '**')] : [globRe(g), globRe('**/' + g)]; }).flat();
+}
+const isGenerated = (f) => GENERATED.test(f) || extraIgnore.some((re) => re.test(f));
+const skip = (f) => isOwn(f) || isGenerated(f);
+
 function git(root, args, opts = {}) {
   return execFileSync('git', args, { cwd: root, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024, ...opts }).toString();
 }
@@ -30,7 +43,7 @@ function parseNumstatZ(out) {
     if (!m) continue;
     let file = m[3], from = null;
     if (file === '') { from = parts[++i]; file = parts[++i]; }
-    if (isOwn(file)) continue;
+    if (skip(file)) continue;
     insertions += Number(m[1]) || 0; deletions += Number(m[2]) || 0;
     files.push(from ? { path: file, status: 'renamed', from } : { path: file, status: 'modified' });
   }
@@ -38,7 +51,7 @@ function parseNumstatZ(out) {
 }
 
 function untracked(root) {
-  return git(root, ['ls-files', '-z', '--others', '--exclude-standard']).split('\0').filter((f) => f && !isOwn(f));
+  return git(root, ['ls-files', '-z', '--others', '--exclude-standard']).split('\0').filter((f) => f && !skip(f));
 }
 
 // Changes from `base` (a commit; default HEAD) to the working tree, plus untracked files.
@@ -67,7 +80,12 @@ function codeFingerprint(root) {
   if (!isRepo(root)) return null;
   const h = crypto.createHash('sha256');
   h.update(`head:${headSha(root) || 'none'}\0`);
-  try { h.update(execFileSync('git', ['diff', '--binary', 'HEAD', '--', '.', ':(exclude).agentreceipt'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1024 * 1024 * 1024 })); } catch {}
+  try {
+    const files = git(root, ['diff', '--name-only', '-z', 'HEAD']).split('\0').filter((f) => f && !skip(f)).sort();
+    for (let i = 0; i < files.length; i += 500) {
+      h.update(execFileSync('git', ['diff', '--binary', 'HEAD', '--', ...files.slice(i, i + 500).map((f) => ':(literal)' + f)], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 1024 * 1024 * 1024 }));
+    }
+  } catch {}
   for (const f of untracked(root).sort()) {
     h.update(`\0untracked:${f}\0`);
     try { h.update(fs.readFileSync(path.join(root, f))); } catch { h.update('<unreadable>'); }
@@ -75,4 +93,4 @@ function codeFingerprint(root) {
   return 'sha256:' + h.digest('hex');
 }
 
-module.exports = { diffSummary, diffBetween, parseNumstatZ, codeFingerprint, headSha, isAncestor, git, isRepo, TEST_FILE };
+module.exports = { setIgnore, isGenerated, diffSummary, diffBetween, parseNumstatZ, codeFingerprint, headSha, isAncestor, git, isRepo, TEST_FILE };
