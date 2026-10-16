@@ -118,3 +118,16 @@ test('config change since the last verified stop is warned about', async () => {
   assert.match(r.receipt.warnings[0], /test command was `npm test`, now `node -e 0`/);
   assert.match(r.output.systemMessage, /Warning: .*config\.json changed/);
 });
+
+test('output printed right before process.exit() is never lost (regression #22)', async () => {
+  const { runTests } = require('../src/run');
+  const dir = tmp('long-');
+  for (let k = 0; k < 5; k++) {
+    const p = runTests(`node -e "for (let i=0;i<20000;i++) console.log('noise line '+i); process.exit(1)"`, dir, 60, { logFile: path.join(dir, `l${k}.log`) });
+    const until = Date.now() + 400; while (Date.now() < until) {} // a busy parent = slow reader, which used to drop the tail
+    const r = await p;
+    assert.equal(r.exitCode, 1);
+    assert.match(fs.readFileSync(r.logPath, 'utf8'), /noise line 19999\n$/);
+    assert.match(r.outputTail, /noise line 19999/); assert.match(r.outputHead, /^noise line 0\n/);
+  }
+});

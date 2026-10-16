@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "tool": "agentreceipt",
+  "createdAt": "2026-10-16T08:06:17.216Z",
+  "agent": "codex",
+  "sessionId": null,
+  "turnId": null,
+  "status": "error",
+  "decision": "allow",
+  "claim": null,
+  "tests": {
+    "command": null,
+    "passed": false,
+    "exitCode": null,
+    "timedOut": false,
+    "durationMs": 0,
+    "outputBytes": null,
+    "logPath": null,
+    "outputTail": ""
+  },
+  "warnings": [],
+  "diff": {
+    "isRepo": true,
+    "base": null,
+    "filesChanged": 2,
+    "insertions": 49,
+    "deletions": 18,
+    "files": [
+      {
+        "path": "src/run.js",
+        "status": "modified"
+      },
+      {
+        "path": "test/batch2.test.js",
+        "status": "modified"
+      }
+    ],
+    "testFilesChanged": [
+      "test/batch2.test.js"
+    ]
+  },
+  "blocks": {
+    "count": 0,
+    "max": 0
+  },
+  "error": "invalid hook input JSON: Unexpected token 'o', \"not json\" is not valid JSON"
+}

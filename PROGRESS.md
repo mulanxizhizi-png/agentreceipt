@@ -46,3 +46,8 @@
 - uninstall: current project by default; shared runtime/global hooks kept while other registered projects (~/.agentreceipt/projects.json) use them, removed with the last one or `--global`.
 - receipts: git head/base/commitsSinceBase (diff from last allowed stop / init, fixes zero diff after agent commits), pre/post code fingerprint (drift during tests => never green), full log file + head/tail, config fingerprint warning.
 - 51 tests green on Node 20 + 24; probe + lab retest rerun: lab 06/09/10/12/13 limitation assertions now fail (= fixed), 07 now warns.
+
+## 2026-10-16 #22 偶发失败修复
+- 根因：测试命令打印大量输出后立刻 `process.exit()`，Node 子进程写到非阻塞管道里还没写出去的数据会被直接丢掉；父进程读得慢时（CI 繁忙）就丢尾部。这是真实产品问题：receipt 会丢测试日志尾部。
+- 修复：子进程 stdout/stderr 直接写入日志文件（同步写，不丢数据），结束后从文件读取 head + tail。新增回归测试（旧代码 5/5 失败，新代码 0 失败）。
+- 验证：Node 20 全量 40 次 0 失败，Node 22 全量 40 次 0 失败，#22 单测 100 次 0 失败。
