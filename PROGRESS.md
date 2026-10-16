@@ -4,6 +4,7 @@
 - **部署复测发现的问题**：Python 项目如果没在 `.gitignore` 里忽略 `__pycache__`，跑测试会生成 `__pycache__/*.pyc`，代码指纹在测试前后不一致，第一次测试明明通过也被拦下。
 - **修复**：变化检测（测试中代码变化的指纹、改动文件统计、测试文件改动、验证标准变化提示）默认忽略生成产物：`__pycache__/`、`*.pyc`、`*.pyo`、`.pytest_cache/`、`.mypy_cache/`、`.ruff_cache/`、`.tox/`、`.nox/`、`*.egg-info/`、`node_modules/.cache`、`.coverage`、`coverage/`、`htmlcov/`、`.nyc_output`。项目可以用配置项 `ignore`（glob 数组）再加自己的规则，格式不对时会给出 error 收据。
 - **回归测试** `test/generated.test.js`：复现部署的场景（Python 项目、没有 `.gitignore`、测试时生成 pyc 和覆盖率文件），第一次就是绿色、不拦截；在旧代码上这个测试会失败。另有默认规则和 `ignore` 配置的测试。全部 77 个测试连跑 10 次都通过。
+- **GitHub Action 与本地一致**：`src/action.js` 和 Stop hook 走同一个 `loadEffectiveConfig`，读取 `config.json` 里的 `ignore` 和 `criteriaFiles`，所以本地收据和 CI 收据的改动文件、测试文件改动、验证标准提示都一致。配置无效时，Action 和 hook 一样生成 error 收据，并把错误写进 PR 评论和 Step Summary，检查标记为失败。新增 `test/action-config.test.js`（本地与 Action 结果对比、无效配置）。全部 79 个测试连跑 10 次都通过。
 - 版本号改为 0.1.4；v0.1.3 仍以 `08869ef` 为准，这次只追加了新提交。
 
 ## v0.1.3（10 月 16 日晚，开发和调试）：Python 文档索引测试报告的两个发现

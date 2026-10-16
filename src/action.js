@@ -2,7 +2,7 @@
 // GitHub Action entry point. No dependencies: uses Node's built-in fetch (Node 18+ on GitHub runners).
 const fs = require('fs');
 const path = require('path');
-const { loadConfig } = require('./config');
+const { loadEffectiveConfig } = require('./config');
 const { detectTestCommand } = require('./detect');
 const { runTests } = require('./run');
 const { diffBetween, git } = require('./git');
@@ -10,9 +10,8 @@ const { buildReceipt, writeReceipt, formatReceipt } = require('./receipt');
 
 const MARKER = '<!-- agentreceipt:ci -->';
 
-function resolveTestCommand(root, input) {
+function resolveTestCommand(root, input, cfg = loadEffectiveConfig(root)) {
   if (input) return input;
-  const cfg = loadConfig(root);
   if (cfg && cfg.testCommand) return cfg.testCommand;
   const d = detectTestCommand(root);
   return d ? d.command : null;
@@ -33,13 +32,14 @@ function prDiff(root, event) {
 }
 
 function markdown(r, { runUrl } = {}) {
-  const icon = r.status === 'green' ? '✅' : '🟥';
-  const title = r.status === 'green' ? 'PASS: tests verified' : 'RED: tests failing';
+  const icon = r.status === 'green' ? '✅' : r.status === 'error' ? '⚠️' : '🟥';
+  const title = r.status === 'green' ? 'PASS: tests verified' : r.status === 'error' ? 'ERROR: could not verify' : 'RED: tests failing';
   const tail = r.tests.outputTail.trim().split('\n').slice(-30).join('\n');
   return [MARKER,
     `### ${icon} Agent Receipt: ${title}`,
     '',
     r.verificationCriteria && r.verificationCriteria.changed ? `> [!NOTE]\n> **${r.verificationCriteria.notice}** / ${r.verificationCriteria.noticeZh}: ${r.verificationCriteria.reasons.map((x) => x.files ? `${x.kind} (${x.files.map((f) => `\`${f}\``).join(', ')})` : x.kind).join('; ')}\n` : null,
+    r.error ? `> [!WARNING]\n> agentreceipt error: ${String(r.error).replace(/\n/g, ' ')}\n` : null,
     '```',
     formatReceipt(r),
     '```',
@@ -80,31 +80,42 @@ async function main(env = process.env) {
   let event = null;
   try { event = JSON.parse(fs.readFileSync(env.GITHUB_EVENT_PATH, 'utf8')); } catch {}
   const pr = event && event.pull_request;
-  const testCommand = resolveTestCommand(root, (env.AR_TEST_COMMAND || '').trim());
+  const runUrl = env.GITHUB_SERVER_URL && env.GITHUB_REPOSITORY && env.GITHUB_RUN_ID ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}` : null;
+  const claim = pr ? [pr.title, (pr.body || '').split('\n')[0]].filter(Boolean).join(' | ') : null;
+  const meta = { agent: 'ci', sessionId: env.GITHUB_RUN_ID || null, turnId: pr ? `pr-${pr.number}@${(pr.head && pr.head.sha || '').slice(0, 7)}` : null, claim };
+  const publish = async (receipt) => {
+    const file = writeReceipt(root, receipt);
+    console.log(formatReceipt(receipt));
+    setOutput('status', receipt.status, env); setOutput('receipt-path', file, env);
+    const body = markdown(receipt, { runUrl });
+    if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, body + '\n');
+    if (pr && String(env.AR_COMMENT).toLowerCase() !== 'false') {
+      try {
+        await upsertComment({ token: env.AR_TOKEN, api: env.GITHUB_API_URL || 'https://api.github.com', repo: env.GITHUB_REPOSITORY, number: pr.number, body });
+      } catch (e) {
+        console.log(`::warning::agentreceipt: could not post PR comment (needs permissions: pull-requests: write). ${e.message}`);
+      }
+    }
+  };
+  // Same config path as the Stop hook (ignore globs, criteriaFiles, validation).
+  let cfg;
+  try { cfg = loadEffectiveConfig(root); } catch (e) {
+    // Same as the hook: invalid config -> 'error' receipt naming the problem; here it is also a failed check.
+    const msg = String(e && e.message || e);
+    const NOT_RUN = { exitCode: null, timedOut: false, durationMs: 0, outputTail: '' };
+    await publish(buildReceipt({ ...meta, testCommand: null, test: NOT_RUN, diff: prDiff(root, event), blockCount: 0, maxBlocks: 0, decision: 'allow', error: msg }));
+    console.log(`::error::agentreceipt: invalid config: ${msg}`); process.exitCode = 1; return;
+  }
+  const testCommand = resolveTestCommand(root, (env.AR_TEST_COMMAND || '').trim(), cfg);
   if (!testCommand) { console.log('::error::agentreceipt: no test command configured or detected. Set the test-command input.'); process.exitCode = 1; return; }
 
   const test = await runTests(testCommand, root, Number(env.AR_TIMEOUT) || 600);
   const diff = prDiff(root, event);
   const passed = test.exitCode === 0 && !test.timedOut;
-  const claim = pr ? [pr.title, (pr.body || '').split('\n')[0]].filter(Boolean).join(' | ') : null;
   const receipt = buildReceipt({
-    agent: 'ci', sessionId: env.GITHUB_RUN_ID || null, turnId: pr ? `pr-${pr.number}@${(pr.head && pr.head.sha || '').slice(0, 7)}` : null,
-    claim, testCommand, test, diff, config: { fingerprint: 'sha256:' + require('crypto').createHash('sha256').update(String(testCommand)).digest('hex'), changedSinceLastVerified: false }, blockCount: 0, maxBlocks: 0, decision: passed ? 'allow' : 'fail',
+    ...meta, testCommand, test, diff, criteriaFiles: cfg && cfg.criteriaFiles, config: { fingerprint: 'sha256:' + require('crypto').createHash('sha256').update(String(testCommand)).digest('hex'), changedSinceLastVerified: false }, blockCount: 0, maxBlocks: 0, decision: passed ? 'allow' : 'fail',
   });
-  const file = writeReceipt(root, receipt);
-  console.log(formatReceipt(receipt));
-  setOutput('status', receipt.status, env); setOutput('receipt-path', file, env);
-  const runUrl = env.GITHUB_SERVER_URL && env.GITHUB_REPOSITORY && env.GITHUB_RUN_ID ? `${env.GITHUB_SERVER_URL}/${env.GITHUB_REPOSITORY}/actions/runs/${env.GITHUB_RUN_ID}` : null;
-  const body = markdown(receipt, { runUrl });
-  if (env.GITHUB_STEP_SUMMARY) fs.appendFileSync(env.GITHUB_STEP_SUMMARY, body + '\n');
-
-  if (pr && String(env.AR_COMMENT).toLowerCase() !== 'false') {
-    try {
-      await upsertComment({ token: env.AR_TOKEN, api: env.GITHUB_API_URL || 'https://api.github.com', repo: env.GITHUB_REPOSITORY, number: pr.number, body });
-    } catch (e) {
-      console.log(`::warning::agentreceipt: could not post PR comment (needs permissions: pull-requests: write). ${e.message}`);
-    }
-  }
+  await publish(receipt);
   if (!passed) { console.log(`::error::agentreceipt: \`${testCommand}\` ${test.timedOut ? 'timed out' : `failed (exit ${test.exitCode})`}`); process.exitCode = 1; }
 }
 

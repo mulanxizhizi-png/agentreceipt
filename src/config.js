@@ -52,6 +52,17 @@ function loadConfig(root) {
   return cfg;
 }
 
+// Shared by the Stop hook and the GitHub Action so local and CI agree: load + validate config.json
+// and apply its change-detection settings (ignore globs). Returns null when unconfigured (resets ignore);
+// throws ConfigError when invalid. Callers pass cfg.criteriaFiles to buildReceipt.
+function loadEffectiveConfig(root) {
+  const { setIgnore } = require('./git');
+  setIgnore([]);
+  const cfg = loadConfig(root);
+  if (cfg) setIgnore(cfg.ignore);
+  return cfg;
+}
+
 function saveConfig(root, cfg) {
   fs.mkdirSync(path.join(root, DIR), { recursive: true });
   fs.writeFileSync(configPath(root), JSON.stringify({ ...DEFAULTS, ...cfg }, null, 2) + '\n');
@@ -61,4 +72,4 @@ function configFingerprint(root) {
   try { return 'sha256:' + require('crypto').createHash('sha256').update(fs.readFileSync(configPath(root))).digest('hex'); } catch { return null; }
 }
 
-module.exports = { configFingerprint, ConfigError, validateConfig, parseNum, DIR, DEFAULTS, findRoot, loadConfig, saveConfig, configPath };
+module.exports = { loadEffectiveConfig, configFingerprint, ConfigError, validateConfig, parseNum, DIR, DEFAULTS, findRoot, loadConfig, saveConfig, configPath };
