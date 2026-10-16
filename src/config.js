@@ -54,4 +54,8 @@ function saveConfig(root, cfg) {
   fs.writeFileSync(configPath(root), JSON.stringify({ ...DEFAULTS, ...cfg }, null, 2) + '\n');
 }
 
-module.exports = { ConfigError, validateConfig, parseNum, DIR, DEFAULTS, findRoot, loadConfig, saveConfig, configPath };
+function configFingerprint(root) {
+  try { return 'sha256:' + require('crypto').createHash('sha256').update(fs.readFileSync(configPath(root))).digest('hex'); } catch { return null; }
+}
+
+module.exports = { configFingerprint, ConfigError, validateConfig, parseNum, DIR, DEFAULTS, findRoot, loadConfig, saveConfig, configPath };

@@ -1,0 +1,84 @@
+{
+  "schemaVersion": 1,
+  "tool": "agentreceipt",
+  "createdAt": "2026-10-16T07:54:55.466Z",
+  "agent": "codex",
+  "sessionId": null,
+  "turnId": null,
+  "status": "error",
+  "decision": "allow",
+  "claim": null,
+  "tests": {
+    "command": null,
+    "passed": false,
+    "exitCode": null,
+    "timedOut": false,
+    "durationMs": 0,
+    "outputBytes": null,
+    "logPath": null,
+    "outputTail": ""
+  },
+  "warnings": [],
+  "diff": {
+    "isRepo": true,
+    "base": null,
+    "filesChanged": 11,
+    "insertions": 210,
+    "deletions": 70,
+    "files": [
+      {
+        "path": "bin/agentreceipt.js",
+        "status": "modified"
+      },
+      {
+        "path": "src/config.js",
+        "status": "modified"
+      },
+      {
+        "path": "src/detect.js",
+        "status": "modified"
+      },
+      {
+        "path": "src/git.js",
+        "status": "modified"
+      },
+      {
+        "path": "src/hook.js",
+        "status": "modified"
+      },
+      {
+        "path": "src/install.js",
+        "status": "modified"
+      },
+      {
+        "path": "src/receipt.js",
+        "status": "modified"
+      },
+      {
+        "path": "src/run.js",
+        "status": "modified"
+      },
+      {
+        "path": "src/state.js",
+        "status": "modified"
+      },
+      {
+        "path": "test/hook.test.js",
+        "status": "modified"
+      },
+      {
+        "path": "test/batch2.test.js",
+        "status": "untracked"
+      }
+    ],
+    "testFilesChanged": [
+      "test/hook.test.js",
+      "test/batch2.test.js"
+    ]
+  },
+  "blocks": {
+    "count": 0,
+    "max": 0
+  },
+  "error": "invalid hook input JSON: Unexpected token 'o', \"not json\" is not valid JSON"
+}

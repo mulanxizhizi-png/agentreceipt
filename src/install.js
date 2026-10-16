@@ -110,8 +110,9 @@ const BLOCK_END = '# <<< agentreceipt';
 function excludePath(root) {
   const { execFileSync } = require('child_process');
   try {
-    const gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
-    return path.join(gitDir, 'info', 'exclude');
+    // info/exclude is read from the *common* git dir, so linked worktrees must use that one.
+    const common = execFileSync('git', ['rev-parse', '--git-common-dir'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+    return path.join(path.resolve(root, common), 'info', 'exclude');
   } catch { return null; }
 }
 
@@ -200,11 +201,28 @@ function uninstall({ agent, root, scope = 'local', env = process.env }) {
   return file;
 }
 
+// Registry of projects that use the shared runtime/global hooks, so uninstalling one project
+// doesn't break another.
+function registryPath(env = process.env) { return path.join(homeDir(env), 'projects.json'); }
+function readRegistry(env = process.env) { try { const r = JSON.parse(fs.readFileSync(registryPath(env), 'utf8')); return Array.isArray(r.projects) ? r.projects : []; } catch { return []; } }
+function writeRegistry(list, env = process.env) {
+  fs.mkdirSync(homeDir(env), { recursive: true });
+  fs.writeFileSync(registryPath(env), JSON.stringify({ projects: [...new Set(list)].sort() }, null, 2) + '\n');
+}
+function registerProject(root, env = process.env) { writeRegistry([...readRegistry(env), path.resolve(root)], env); }
+// Removes `root` and any entry whose project no longer has .agentreceipt/config.json. Returns remaining projects.
+function unregisterProject(root, env = process.env) {
+  const rest = readRegistry(env).filter((p) => p !== path.resolve(root) && fs.existsSync(path.join(p, '.agentreceipt', 'config.json')));
+  writeRegistry(rest, env);
+  return rest;
+}
+
 function removeRuntime(env = process.env) {
   const home = homeDir(env);
   fs.rmSync(path.join(home, 'runtime'), { recursive: true, force: true });
   fs.rmSync(path.join(home, 'bin'), { recursive: true, force: true });
+  fs.rmSync(registryPath(env), { force: true });
   try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
 }
 
-module.exports = { shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };
+module.exports = { readRegistry, registerProject, unregisterProject, excludePath, shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };

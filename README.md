@@ -18,7 +18,7 @@ npx github:mulanxizhizi-png/agentreceipt init
 
 `init` never overwrites a settings file it can't parse: it stops with an error and changes nothing. Before modifying an existing file, it saves a copy to `~/.agentreceipt/backups/`.
 
-`init` finds your test command (`package.json` test via npm/pnpm/yarn/bun, pytest, cargo, go, `make test`), or asks you for it. It writes `.agentreceipt/config.json` and installs the hook. The runtime is copied to `~/.agentreceipt/runtime/<version>/` (behind a stable shim in `~/.agentreceipt/bin/`) so the hook keeps working after npx clears its cache. Requires Node 18 or newer. No dependencies.
+`init` finds your test command (`package.json` test via npm/pnpm/yarn/bun, chosen by the `packageManager` field or lockfile incl. `bun.lock`, pytest, cargo, go, `make test`), or asks you for it. It writes `.agentreceipt/config.json` and installs the hook. The runtime is copied to `~/.agentreceipt/runtime/<version>/` (behind a stable shim in `~/.agentreceipt/bin/`) so the hook keeps working after npx clears its cache. Requires Node 18 or newer. No dependencies.
 
 ## Codex: trust the hook once
 
@@ -63,7 +63,7 @@ agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope lo
 ## What goes in git
 
 - **Commit** `.agentreceipt/config.json` (the team-shared test command, timeout and block limit) and `.agentreceipt/.gitignore`, so teammates' receipts are ignored too.
-- **Not committed:** `.agentreceipt/receipts/`, `.agentreceipt/state/` and `.claude/settings.local.json`. `init` lists them in a marked block in `.git/info/exclude` (`# >>> agentreceipt` … `# <<< agentreceipt`), so `git status` stays clean without touching your `.gitignore`. `uninstall` removes only that block.
+- **Not committed:** `.agentreceipt/receipts/`, `.agentreceipt/state/` and `.claude/settings.local.json`. `init` lists them in a marked block in `.git/info/exclude` (`# >>> agentreceipt` … `# <<< agentreceipt`), so `git status` stays clean without touching your `.gitignore`. `uninstall` removes only that block. In a linked worktree this goes to the shared repo's `info/exclude` (the one git actually reads).
 
 ## Receipts
 
@@ -78,13 +78,23 @@ Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hi
   "status": "red",
   "decision": "allow",
   "claim": "Done, all tests pass.",
-  "tests": { "command": "npm test", "passed": false, "exitCode": 1, "timedOut": false, "durationMs": 412, "outputTail": "..." },
-  "diff": { "filesChanged": 0, "insertions": 0, "deletions": 0, "files": [], "testFilesChanged": [] },
+  "tests": { "command": "npm test", "passed": false, "exitCode": 1, "timedOut": false, "durationMs": 412,
+             "outputBytes": 1830, "logPath": "/repo/.agentreceipt/receipts/2026-10-16T08-00-00-000Z-a1b2c3.log", "outputTail": "..." },
+  "git": { "head": "3f2c…", "base": "9a1e…", "commitsSinceBase": 1 },
+  "fingerprint": { "before": "sha256:…", "after": "sha256:…", "changedDuringTests": false },
+  "config": { "fingerprint": "sha256:…", "changedSinceLastVerified": false },
+  "warnings": [],
+  "diff": { "base": "9a1e…", "filesChanged": 1, "insertions": 3, "deletions": 1, "files": [{ "path": "src/pricing.js", "status": "modified" }], "testFilesChanged": [] },
   "blocks": { "count": 1, "max": 1 }
 }
 ```
 
-`testFilesChanged` flags agents that edit the tests instead of the code. The block message warns them too.
+- `testFilesChanged` flags agents that edit the tests instead of the code. The block message warns them too.
+- **Diff base:** changes are measured from the commit at the last allowed stop (or at `init`), so code the agent *committed* still shows up. `git.head` is the commit that was tested.
+- **Fingerprint:** the code on disk is hashed before and after the test run. If it changed while tests ran, the receipt is never green (blocked, or red at the limit).
+- **Full log:** the complete test output is saved next to the receipt (`tests.logPath`, capped at 50 MB). The receipt and the block message keep the start and the end of the output, so an early assertion isn't lost under noise.
+- **Config warning:** if `.agentreceipt/config.json` changed since the last allowed stop (e.g. the test command was swapped), the receipt carries a warning and the agent/user sees it. It warns; it does not block.
+- Paths are read with `git -z`, so non-ASCII, spaces and renames are reported exactly.
 
 ## GitHub Action (free)
 
@@ -121,6 +131,8 @@ Outputs: `status` (`green`/`red`) and `receipt-path`. The receipt is also added 
 npx github:mulanxizhizi-png/agentreceipt uninstall
 ```
 
-This removes the hooks from `~/.codex/hooks.json`, `.claude/settings.local.json`, `~/.claude/settings.json` and any legacy entry in `.claude/settings.json` (files without an agentreceipt hook are left untouched), and deletes `~/.agentreceipt/runtime` and `~/.agentreceipt/bin`. Delete `.agentreceipt/` in your repo yourself if you don't want the receipts.
+By default this only affects the **current project**: it removes the hook from `.claude/settings.local.json` (and any legacy entry in `.claude/settings.json`) and the agentreceipt block in `.git/info/exclude`.
+
+The shared pieces (the Codex hook in `~/.codex/hooks.json`, the hook in `~/.claude/settings.json`, and `~/.agentreceipt/runtime` + `bin`) are used by every project you ran `init` in, so they are kept while another project still has agentreceipt set up, and removed automatically when you uninstall the last one. `uninstall --global` removes them right away. Files without an agentreceipt hook are left untouched; backups of edited settings stay in `~/.agentreceipt/backups/`. `.agentreceipt/config.json` is left in place (it's team-shared); delete `.agentreceipt/` yourself if you want.
 
 MIT licensed.

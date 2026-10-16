@@ -7,7 +7,7 @@ function repo(pass, extra = {}) {
   saveConfig(d, { testCommand: 'node ok.js', timeoutSec: 10, maxBlocks: 2 });
   return d;
 }
-const receipts = (d) => fs.readdirSync(path.join(d, '.agentreceipt', 'receipts'));
+const receipts = (d) => fs.readdirSync(path.join(d, '.agentreceipt', 'receipts')).filter((f) => f.endsWith('.json'));
 
 test('no config -> no-op', async () => {
   const r = await handleStop({ cwd: tmpRepo({}) });

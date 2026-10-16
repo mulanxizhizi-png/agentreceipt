@@ -38,4 +38,16 @@ async function withSessionLock(root, sessionId, staleMs, fn) {
   try { return await fn(); } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 }
 
-module.exports = { getBlocks, setBlocks, withSessionLock, key };
+// Repo-level record of the last stop that ended a turn: the base for the next receipt's diff
+// (so commits made by the agent stay visible) and the config fingerprint (to warn when it changes).
+function lastFile(root) { return path.join(root, DIR, 'state', 'last.json'); }
+function getLast(root) { try { return JSON.parse(fs.readFileSync(lastFile(root), 'utf8')); } catch { return null; } }
+function setLast(root, data) {
+  const f = lastFile(root);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  const tmp = `${f}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ ...data, updatedAt: new Date().toISOString() }) + '\n');
+  fs.renameSync(tmp, f);
+}
+
+module.exports = { getBlocks, setBlocks, withSessionLock, key, getLast, setLast };

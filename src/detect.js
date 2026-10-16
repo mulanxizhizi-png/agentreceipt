@@ -12,8 +12,18 @@ function detectTestCommand(dir) {
       const pkg = JSON.parse(fs.readFileSync(path.join(dir, 'package.json'), 'utf8'));
       const t = pkg.scripts && pkg.scripts.test;
       if (t && !NPM_PLACEHOLDER.test(t)) {
-        const pm = has('pnpm-lock.yaml') ? 'pnpm' : has('yarn.lock') ? 'yarn' : has('bun.lockb') ? 'bun' : 'npm';
-        return { command: pm === 'npm' ? 'npm test' : `${pm} test`, source: 'package.json scripts.test' };
+        // packageManager field wins; otherwise the lockfile; npm if none (or several conflicting ones).
+        let pm = null, why = '';
+        const declared = typeof pkg.packageManager === 'string' && /^(npm|pnpm|yarn|bun)@/.exec(pkg.packageManager);
+        if (declared) { pm = declared[1]; why = `packageManager ${pkg.packageManager}`; }
+        else {
+          const locks = [['pnpm', 'pnpm-lock.yaml'], ['yarn', 'yarn.lock'], ['bun', 'bun.lock'], ['bun', 'bun.lockb'], ['npm', 'package-lock.json']].filter(([, f]) => has(f));
+          const kinds = [...new Set(locks.map(([k]) => k))];
+          if (kinds.length === 1) { pm = kinds[0]; why = locks.filter(([k]) => k === pm).map(([, f]) => f).join(', '); }
+          else if (kinds.length > 1) { pm = 'npm'; why = `several lockfiles (${locks.map(([, f]) => f).join(', ')}); defaulting to npm, set --test to override`; }
+        }
+        pm = pm || 'npm';
+        return { command: pm === 'npm' ? 'npm test' : `${pm} test`, source: `package.json scripts.test${why ? ` (${why})` : ''}` };
       }
     } catch { /* ignore bad package.json */ }
   }

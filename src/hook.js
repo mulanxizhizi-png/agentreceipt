@@ -1,20 +1,28 @@
 'use strict';
 const fs = require('fs');
-const { findRoot, loadConfig, DIR } = require('./config');
+const path = require('path');
+const crypto = require('crypto');
+const { findRoot, loadConfig, configFingerprint, DIR } = require('./config');
 const { runTests } = require('./run');
-const { diffSummary } = require('./git');
+const { diffSummary, codeFingerprint, headSha, isAncestor, git: gitCmd } = require('./git');
 const { buildReceipt, writeReceipt, formatReceipt } = require('./receipt');
-const { getBlocks, setBlocks, withSessionLock } = require('./state');
+const { getBlocks, setBlocks, withSessionLock, getLast, setLast } = require('./state');
 const { extractClaim } = require('./claim');
 
 const NOT_RUN = { exitCode: null, timedOut: false, durationMs: 0, outputTail: '' };
 const EMPTY_DIFF = { isRepo: false, files: [], insertions: 0, deletions: 0, testFilesChanged: [] };
 
 function blockReason(r) {
-  const parts = [`agentreceipt: you tried to finish, but \`${r.tests.command}\` ${r.tests.timedOut ? 'timed out' : `failed (exit ${r.tests.exitCode})`}.`];
+  const drift = r.fingerprint && r.fingerprint.changedDuringTests;
+  const parts = [drift && r.tests.passed
+    ? `agentreceipt: \`${r.tests.command}\` passed, but the code changed while the tests were running, so the result can't be trusted. Make sure nothing is still editing files, then re-run the tests.`
+    : `agentreceipt: you tried to finish, but \`${r.tests.command}\` ${r.tests.timedOut ? 'timed out' : `failed (exit ${r.tests.exitCode})`}.`];
+  for (const w of r.warnings || []) parts.push(`Warning: ${w}`);
   if (r.diff.testFilesChanged.length) parts.push(`Note: test files were modified (${r.diff.testFilesChanged.join(', ')}); fix the code, not the tests.`);
+  if (r.tests.outputHead) parts.push(`Start of test output:\n${r.tests.outputHead.trim().split('\n').slice(0, 25).join('\n')}`);
   const tail = r.tests.outputTail.trim().split('\n').slice(-25).join('\n');
-  if (tail) parts.push(`Last test output:\n${tail}`);
+  if (tail) parts.push(`${r.tests.outputHead ? 'End' : 'Last'} of test output:\n${tail}`);
+  if (r.tests.logPath) parts.push(`Full log: ${r.tests.logPath}`);
   parts.push(`Fix the failures and re-run the tests before finishing. (block ${r.blocks.count}/${r.blocks.max})`);
   return parts.join('\n\n');
 }
@@ -50,20 +58,40 @@ async function handleStop(input, { agent = 'codex' } = {}) {
       // stop_hook_active=false means this stop starts a fresh turn (not a continuation we caused),
       // so the block budget resets. Both Codex and Claude Code send this field.
       const prior = input.stop_hook_active === false ? 0 : getBlocks(root, sessionId);
-      const test = await runTests(cfg.testCommand, root, cfg.timeoutSec);
+      const last = getLast(root);
+      const head = headSha(root);
+      // Diff base: the commit at the last turn-ending stop (or init), if it's still an ancestor of HEAD.
+      const base = last && last.sha && head && last.sha !== head && isAncestor(root, last.sha, head) ? last.sha : null;
+      let commitsSinceBase = 0;
+      if (base) { try { commitsSinceBase = Number(gitCmd(root, ['rev-list', '--count', `${base}..${head}`]).trim()) || 0; } catch {} }
+      const cfgFp = configFingerprint(root);
+      const warnings = [];
+      const configChanged = !!(last && last.configFingerprint && cfgFp && last.configFingerprint !== cfgFp);
+      if (configChanged) warnings.push(`.agentreceipt/config.json changed since the last verified stop${last.testCommand && last.testCommand !== cfg.testCommand ? ` (test command was \`${last.testCommand}\`, now \`${cfg.testCommand}\`)` : ''}`);
+
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-') + '-' + crypto.randomBytes(3).toString('hex');
+      const logFile = path.join(root, DIR, 'receipts', `${stamp}.log`);
+      const fpBefore = codeFingerprint(root);
+      const test = await runTests(cfg.testCommand, root, cfg.timeoutSec, { logFile });
+      const fpAfter = codeFingerprint(root);
       if (test.spawnError) return errorResult({ root, agent, input, error: `test command could not be started: ${test.spawnError}`, testCommand: cfg.testCommand, test });
       if (test.exitCode === 127) return errorResult({ root, agent, input, error: `test command not found (exit 127): ${test.outputTail.trim().split('\n').pop()}`, testCommand: cfg.testCommand, test });
-      const diff = diffSummary(root);
-      const passed = test.exitCode === 0 && !test.timedOut;
+      const diff = diffSummary(root, base);
+      const fingerprint = { before: fpBefore, after: fpAfter, changedDuringTests: !!(fpBefore && fpAfter && fpBefore !== fpAfter) };
+      const passed = test.exitCode === 0 && !test.timedOut && !fingerprint.changedDuringTests;
       const canBlock = !passed && prior < cfg.maxBlocks;
       const blockCount = canBlock ? prior + 1 : prior;
       const receipt = buildReceipt({
         agent, sessionId, turnId: input.turn_id, claim: extractClaim(input),
         testCommand: cfg.testCommand, test, diff, blockCount, maxBlocks: cfg.maxBlocks,
         decision: canBlock ? 'block' : 'allow',
+        git: { head, base, commitsSinceBase }, fingerprint,
+        config: { fingerprint: cfgFp, changedSinceLastVerified: configChanged },
+        warnings,
       });
       const file = writeReceipt(root, receipt);
       setBlocks(root, sessionId, canBlock ? blockCount : 0); // reset once the agent is allowed to stop
+      if (!canBlock) setLast(root, { sha: head, configFingerprint: cfgFp, testCommand: cfg.testCommand, receipt: path.basename(file) });
       const text = formatReceipt(receipt);
       const output = canBlock
         ? { decision: 'block', reason: blockReason(receipt) }

@@ -40,3 +40,9 @@
 - hook 自身出错（配置坏了、收据写不进去、测试命令启动不了或找不到）：仍然放行，不困住 agent，但会尽量写一张 error 收据，并在 systemMessage 和 stderr 里给出警告。
 - 会话 id 改为哈希后做文件名，不同会话不会撞上；同一会话的并发 Stop 加锁串行，计数正确。
 - 单元测试 43 个全过；外部探针复测：上述 7 项全部转为已修复，中文路径和 bun.lock 留到第二批。
+
+## 2026-10-16 v0.1.1 batch 2 (Codex review)
+- git paths via `-z` (unicode/tab/newline/renames exact); bun.lock + packageManager detection; linked worktree uses common-dir info/exclude.
+- uninstall: current project by default; shared runtime/global hooks kept while other registered projects (~/.agentreceipt/projects.json) use them, removed with the last one or `--global`.
+- receipts: git head/base/commitsSinceBase (diff from last allowed stop / init, fixes zero diff after agent commits), pre/post code fingerprint (drift during tests => never green), full log file + head/tail, config fingerprint warning.
+- 51 tests green on Node 20 + 24; probe + lab retest rerun: lab 06/09/10/12/13 limitation assertions now fail (= fixed), 07 now warns.
