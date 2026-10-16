@@ -64,6 +64,8 @@ async function main() {
     case 'uninstall': {
       const root = findRoot(process.cwd());
       for (const a of ['codex', 'claude']) { const f = inst.uninstall({ agent: a, root }); if (f) console.log(`Removed hook from ${f}`); }
+      inst.removeRuntime();
+      console.log(`Removed runtime from ${path.join(inst.homeDir(), 'runtime')}`);
       return;
     }
     case '--version': case '-v': return console.log(inst.VERSION);

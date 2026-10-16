@@ -68,4 +68,10 @@ function uninstall({ agent, root, env = process.env }) {
   return file;
 }
 
-module.exports = { VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath };
+function removeRuntime(env = process.env) {
+  const home = homeDir(env);
+  fs.rmSync(path.join(home, 'runtime'), { recursive: true, force: true });
+  try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
+}
+
+module.exports = { removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath };

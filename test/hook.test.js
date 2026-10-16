@@ -46,3 +46,9 @@ test('flags modified test files', async () => {
   assert.deepEqual(r.receipt.diff.testFilesChanged, ['test/a.test.js']);
   assert.match(r.output.reason, /fix the code, not the tests/);
 });
+test('diff ignores agentreceipt own files and untracked .claude/settings.json', async () => {
+  const d = repo(true);
+  fs.mkdirSync(path.join(d, '.claude')); fs.writeFileSync(path.join(d, '.claude/settings.json'), '{}');
+  const r = await handleStop({ cwd: d, session_id: 'x' });
+  assert.equal(r.receipt.diff.filesChanged, 0);
+});

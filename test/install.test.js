@@ -27,3 +27,11 @@ test('claude install writes .claude/settings.json preserving keys', () => {
   const doc = JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json'), 'utf8'));
   assert.equal(doc.model, 'x'); assert.match(doc.hooks.Stop[0].hooks[0].command, /--agent claude/);
 });
+test('removeRuntime deletes runtime and empty home', () => {
+  const home = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'arh-')), '.agentreceipt');
+  const env = { AGENTRECEIPT_HOME: home };
+  inst.installRuntime(env);
+  assert.ok(fs.existsSync(path.join(home, 'runtime')));
+  inst.removeRuntime(env);
+  assert.equal(fs.existsSync(home), false);
+});
