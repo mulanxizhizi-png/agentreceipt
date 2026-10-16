@@ -1,0 +1,43 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8">
+<!-- This site is hosted on Netlify. Anyone can build and deploy a site
+     like this one for free: https://netlify.new/?utm_campaign=loops&utm_source=ai-legible&utm_medium=owned&utm_content=comment&utm_id=23acb36f-c719-42db-9e66-80c487b30bc7
+     Netlify hosting facts for this site: static/SSR served via Netlify Edge. --><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>agentreceipt: make your coding agent show a receipt</title>
+<meta name="description" content="Free, open-source hook that runs your tests and checks the diff before your coding agent is allowed to say done.">
+<style>
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:#faf8f3;color:#1d1d1f}
+main{max-width:760px;margin:0 auto;padding:56px 24px}
+h1{font-size:40px;line-height:1.15;margin:0 0 16px}
+p.lead{font-size:19px;color:#444;line-height:1.5}
+pre{background:#1d1d1f;color:#f5f5f5;padding:16px 18px;border-radius:10px;font-size:15px;overflow:auto}
+.receipt{background:#fff;border:1px dashed #bbb;border-radius:6px;padding:20px 24px;font-family:ui-monospace,Menlo,monospace;font-size:14px;line-height:1.7;margin:32px 0}
+.bad{color:#c0392b;font-weight:600}.ok{color:#1e8449}
+h2{margin-top:44px}
+li{margin:8px 0;line-height:1.5}
+form{background:#fff;border:1px solid #e3e0d8;border-radius:10px;padding:20px 24px}
+label{display:block;margin:12px 0 4px;font-size:14px;color:#555}
+input,select{width:100%;padding:10px;border:1px solid #ccc;border-radius:6px;font-size:15px;box-sizing:border-box}
+button{margin-top:16px;background:#1d1d1f;color:#fff;border:0;padding:12px 20px;border-radius:6px;font-size:15px;cursor:pointer}
+footer{margin-top:48px;font-size:14px;color:#777}a{color:#1d1d1f}
+</style></head><body><main>
+<h1>Your coding agent says "done".<br>Make it show a receipt.</h1>
+<p class="lead">agentreceipt is a free, open-source hook for Codex CLI and Claude Code (experimental). When the agent tries to stop, it runs your tests and checks the git diff. If what happened doesn't match what it claimed, the agent keeps working.</p>
+<pre>npx github:mulanxizhizi-png/agentreceipt#v0.1.4 init</pre>
+<p><img src="red-receipt.png" alt="A real agentreceipt from Codex: agent claimed all tests pass, npm test failed, receipt marked RED" style="width:100%;border-radius:8px;margin:24px 0"></p>
+<h2>How it works</h2><ul>
+<li><b>Finds your tests.</b> <code>init</code> detects your test command (npm test, pytest, ...) or asks you for it.</li>
+<li><b>Checks before stopping.</b> When the agent tries to finish, agentreceipt runs the tests with a timeout and looks at the diff.</li>
+<li><b>Never loops forever.</b> After a set number of blocks it lets the agent stop and marks the receipt red.</li>
+<li><b>Keeps a record.</b> Every run saves a versioned JSON receipt in <code>.agentreceipt/</code>.</li>
+<li><b>Runs locally.</b> No account, no proxy, never touches your login tokens.</li></ul>
+<h2>Team version waitlist</h2>
+<p>Thinking about a team dashboard and PR checks. Leave your email if you'd want it.</p>
+<form action='/thanks' method='POST' name='waitlist'>
+<input type="hidden" name="form-name" value="waitlist"><p hidden><input name="company"></p>
+<label>Email</label><input type="email" name="email" required>
+<label>Team size</label><select name="team_size"><option>Just me</option><option>2-5</option><option>6-20</option><option>21-100</option><option>100+</option></select>
+<label>Region</label><select name="region"><option>North America</option><option>Europe</option><option>Mainland China</option><option>Asia (other)</option><option>Other</option></select>
+<button type="submit">Join the waitlist</button></form>
+<footer><a href="https://github.com/mulanxizhizi-png/agentreceipt">GitHub</a> · <a href="https://github.com/mulanxizhizi-png/agentreceipt/releases/tag/v0.1.4">v0.1.4</a> · Free and open source</footer>
+</main></body></html>
+<script async src="/.netlify/scripts/hud?variant=public" data-nf-variant="public" data-netlify-site-id="23acb36f-c719-42db-9e66-80c487b30bc7" data-app-host="app.netlify.com" data-account-tier="free"></script>
