@@ -3,3 +3,4 @@ spike/
 e2e/*.log
 *.tgz
 .agentreceipt/
+.test-tmp/
