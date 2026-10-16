@@ -87,11 +87,17 @@ async function main() {
       };
       tryUninstall('claude', 'local'); tryUninstall('claude', 'project');
       if (inst.removeExcludes(root)) console.log('Removed agentreceipt block from .git/info/exclude');
+      if (inst.cleanProjectData(root)) console.log('Removed receipts/state from .agentreceipt (config.json kept)');
       const others = inst.unregisterProject(root);
       const global = args.includes('--global') || others.length === 0;
       if (!global) {
         console.log(`Kept the shared runtime and global hooks: ${others.length} other project${others.length > 1 ? 's' : ''} still use${others.length > 1 ? '' : 's'} agentreceipt. Run \`agentreceipt uninstall --global\` to remove everything.`);
       } else {
+        // the global hooks/runtime go away, so clean every other registered project too
+        for (const p of others) {
+          try { inst.uninstall({ agent: 'claude', root: p, scope: 'local' }); inst.removeExcludes(p); if (inst.cleanProjectData(p)) console.log(`Cleaned ${p}`); }
+          catch (e) { console.error(`agentreceipt: skipped ${p}: ${e.message}`); }
+        }
         tryUninstall('codex'); tryUninstall('claude', 'user');
         if (failed) { console.error('agentreceipt: runtime kept because a hook could not be removed.'); process.exitCode = 1; return; }
         inst.removeRuntime();

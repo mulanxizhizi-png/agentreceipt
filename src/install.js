@@ -217,6 +217,27 @@ function unregisterProject(root, env = process.env) {
   return rest;
 }
 
+// Delete generated data (receipts/state/logs) under <root>/.agentreceipt, keep config.json;
+// remove the dir if nothing else is left. Returns true if anything was removed.
+function cleanProjectData(root) {
+  const dir = path.join(root, '.agentreceipt');
+  if (!fs.existsSync(dir)) return false;
+  let removed = false;
+  for (const n of ['receipts', 'state', 'logs']) {
+    const p = path.join(dir, n);
+    if (fs.existsSync(p)) { fs.rmSync(p, { recursive: true, force: true }); removed = true; }
+  }
+  // the .gitignore init wrote: drop it unless the user committed it or changed it
+  const gi = path.join(dir, '.gitignore');
+  if (fs.existsSync(gi) && fs.readFileSync(gi, 'utf8') === 'receipts/\nstate/\n') {
+    let tracked = false;
+    try { require('child_process').execFileSync('git', ['ls-files', '--error-unmatch', '.agentreceipt/.gitignore'], { cwd: root, stdio: 'ignore' }); tracked = true; } catch {}
+    if (!tracked) { fs.unlinkSync(gi); removed = true; }
+  }
+  try { if (!fs.readdirSync(dir).length) { fs.rmdirSync(dir); removed = true; } } catch {}
+  return removed;
+}
+
 function removeRuntime(env = process.env) {
   const home = homeDir(env);
   fs.rmSync(path.join(home, 'runtime'), { recursive: true, force: true });
@@ -225,4 +246,4 @@ function removeRuntime(env = process.env) {
   try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
 }
 
-module.exports = { readRegistry, registerProject, unregisterProject, excludePath, shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };
+module.exports = { cleanProjectData, readRegistry, registerProject, unregisterProject, excludePath, shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };

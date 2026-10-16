@@ -55,3 +55,9 @@
 ## 2026-10-16 验证标准变化提示
 - 测试文件、检查命令/配置（.agentreceipt/config.json、CI workflow、package.json、jest/vitest/pytest 配置等）变化时，receipt 新增 `verificationCriteria` 字段（changed、reasons、configFingerprint），并在人类可读回执、agent 反馈、PR 评论中以中性提示显示「验证标准已变化，需复核 / Verification criteria changed, review needed」。
 - 只做提示，不改变 status（场景 08 仍不阻断）。新增 3 个测试，共 55 个；Node 20 / Node 22 并行各跑 40 次，0 失败。
+
+## 2026-10-16 v0.1.2：卸载时清理生成文件
+- 问题（部署干净环境实测发现）：卸载后 `.git/info/exclude` 的忽略规则被删，但 `.agentreceipt/` 里的收据、状态文件还在，`git status` 多出一堆未跟踪文件。
+- 修复：`uninstall` 会删除 `.agentreceipt/` 下的 `receipts/`、`state/`、`logs/`，以及 init 自动生成且未被提交的 `.gitignore`，只保留 `config.json`；没有 `config.json` 时整个目录删掉。`uninstall --global` 对所有已登记的项目都做同样清理。
+- 卸载后 `git status` 里与 agentreceipt 相关的只剩 `.agentreceipt/config.json`（如果它没提交过）。
+- 新增 3 个测试，共 58 个；Node 20 连跑 20 次全绿。版本号升到 0.1.2（tag/release 由部署来做）。
