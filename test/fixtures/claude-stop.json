@@ -1,0 +1,10 @@
+{
+  "session_id": "cc-1",
+  "transcript_path": "__TRANSCRIPT__",
+  "cwd": "__CWD__",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "background_tasks": [],
+  "session_crons": []
+}

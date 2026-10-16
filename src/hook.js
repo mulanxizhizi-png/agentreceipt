@@ -5,6 +5,7 @@ const { runTests } = require('./run');
 const { diffSummary } = require('./git');
 const { buildReceipt, writeReceipt, formatReceipt } = require('./receipt');
 const { getBlocks, setBlocks } = require('./state');
+const { extractClaim } = require('./claim');
 
 function blockReason(r) {
   const parts = [`agentreceipt: you tried to finish, but \`${r.tests.command}\` ${r.tests.timedOut ? 'timed out' : `failed (exit ${r.tests.exitCode})`}.`];
@@ -23,14 +24,16 @@ async function handleStop(input, { agent = 'codex' } = {}) {
   if (!cfg || !cfg.testCommand) return { output: {}, skipped: true };
 
   const sessionId = input.session_id;
-  const prior = getBlocks(root, sessionId);
+  // stop_hook_active=false means this stop starts a fresh turn (not a continuation we caused),
+  // so the block budget resets. Both Codex and Claude Code send this field.
+  const prior = input.stop_hook_active === false ? 0 : getBlocks(root, sessionId);
   const test = await runTests(cfg.testCommand, root, cfg.timeoutSec);
   const diff = diffSummary(root);
   const passed = test.exitCode === 0 && !test.timedOut;
   const canBlock = !passed && prior < cfg.maxBlocks;
   const blockCount = canBlock ? prior + 1 : prior;
   const receipt = buildReceipt({
-    agent, sessionId, turnId: input.turn_id, claim: input.last_assistant_message,
+    agent, sessionId, turnId: input.turn_id, claim: extractClaim(input),
     testCommand: cfg.testCommand, test, diff, blockCount, maxBlocks: cfg.maxBlocks,
     decision: canBlock ? 'block' : 'allow',
   });

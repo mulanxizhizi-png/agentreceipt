@@ -16,4 +16,5 @@
 - 未完成 / 阻塞：
   - Claude Code 实测需要 Zjing 私聊帮忙登录一次。
 - 升级不再需要重新信任：hook 命令固定指向 ~/.agentreceipt/bin/agentreceipt-hook（一个转发脚本），升级时只改脚本里指向的版本，Codex 看到的命令文本不变。实测：0.1.0 信任一次 → 升到 0.1.1 重新 init → 启动 Codex 不再弹「Hooks need review」。没有用到模型额度。
-- 明天（第 2 天）：Claude Code 适配（按官方文档，不登录），init 交互体验打磨。
+- Claude Code 适配（按官方文档，没有登录实测）：Stop hook 可以装到项目的 .claude/settings.json 或用户的 ~/.claude/settings.json（--claude-scope user）。测试没过时返回 decision: block 加 reason。agent 说了什么，优先读 last_assistant_message，读不到就从对话记录 transcript_path 里取最后一条回复。用 stop_hook_active 防死循环：同一轮里被拦后的续跑计入拦截上限，新一轮重新计数。uninstall 会清掉项目级和用户级两处。单元测试 26 个全过，含 Claude 的输入样例和对话记录样例。
+- 待办：Claude Code 实测需要 Zjing 私聊帮忙登录一次；init 交互体验打磨。

@@ -65,7 +65,10 @@ function removeStopHook(doc) {
 }
 
 function codexHooksPath(env = process.env) { return path.join(env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'hooks.json'); }
-function claudeSettingsPath(root) { return path.join(root, '.claude', 'settings.json'); }
+function claudeSettingsPath(root, scope = 'project', env = process.env) {
+  if (scope === 'user') return path.join(env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json');
+  return path.join(root, '.claude', 'settings.json');
+}
 
 function writeHooks(file, doc) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -73,17 +76,18 @@ function writeHooks(file, doc) {
   fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
 }
 
-function install({ agent, root, binPath, timeoutSec, env = process.env }) {
-  // hook timeout = test timeout + slack for git/diff
-  const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root);
+function install({ agent, root, binPath, scope = 'project', env = process.env }) {
+  const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env);
   writeHooks(file, upsertStopHook(readJson(file), hookCommand(binPath, agent), HOOK_TIMEOUT));
   return file;
 }
 
-function uninstall({ agent, root, env = process.env }) {
-  const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root);
+function uninstall({ agent, root, scope = 'project', env = process.env }) {
+  const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env);
   if (!fs.existsSync(file)) return null;
+  const before = JSON.stringify(readJson(file));
   const doc = removeStopHook(readJson(file));
+  if (JSON.stringify(doc) === before) return null; // nothing of ours there; leave the file untouched
   if (!Object.keys(doc).length) fs.unlinkSync(file); else fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
   return file;
 }
