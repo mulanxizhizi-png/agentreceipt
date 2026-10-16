@@ -75,20 +75,22 @@ function claudeSettingsPath(root, scope = 'local', env = process.env) {
   return path.join(root, '.claude', 'settings.local.json');
 }
 
-// Make sure .claude/settings.local.json is gitignored (Claude Code does this itself only when *it* writes the file).
+// Make sure .claude/settings.local.json is ignored by git. Uses .git/info/exclude (local, never committed),
+// so init doesn't add a .gitignore change to the user's repo. (Claude Code does this itself only when *it* writes the file.)
 function ensureGitignored(root, rel = '.claude/settings.local.json') {
   const { execFileSync } = require('child_process');
-  try { execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' }); } catch { return false; }
+  let gitDir;
+  try { gitDir = execFileSync('git', ['rev-parse', '--absolute-git-dir'], { cwd: root, stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim(); } catch { return false; }
   try { execFileSync('git', ['check-ignore', '-q', rel], { cwd: root, stdio: 'ignore' }); return false; } catch { /* not ignored */ }
-  const gi = path.join(root, '.gitignore');
-  const cur = fs.existsSync(gi) ? fs.readFileSync(gi, 'utf8') : '';
-  fs.writeFileSync(gi, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + rel + '\n');
+  const ex = path.join(gitDir, 'info', 'exclude');
+  fs.mkdirSync(path.dirname(ex), { recursive: true });
+  const cur = fs.existsSync(ex) ? fs.readFileSync(ex, 'utf8') : '';
+  fs.writeFileSync(ex, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + rel + '\n');
   return true;
 }
 
 function writeHooks(file, doc) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  if (fs.existsSync(file) && !fs.existsSync(file + '.agentreceipt.bak')) fs.copyFileSync(file, file + '.agentreceipt.bak');
   fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
 }
 
@@ -102,6 +104,7 @@ function install({ agent, root, binPath, scope = 'local', env = process.env }) {
 
 function uninstall({ agent, root, scope = 'local', env = process.env }) {
   const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env);
+  try { fs.unlinkSync(file + '.agentreceipt.bak'); } catch {} // left by versions <= 0.1.0
   if (!fs.existsSync(file)) return null;
   const before = JSON.stringify(readJson(file));
   const doc = removeStopHook(readJson(file));

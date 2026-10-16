@@ -30,9 +30,15 @@ You can review it again anytime with `/hooks`. Upgrading agentreceipt (re-runnin
 
 ## Claude Code (experimental)
 
-Tested end-to-end with Claude Code 2.1.301 in headless mode (`claude -p`), running on DeepSeek's Anthropic-compatible API (`deepseek-flash`). Two cases passed: blocked, then the agent fixed the code and the stop was allowed (PASS); and the block limit was reached (RED). Logs are in `e2e/claude/`. Not yet tested on an official Anthropic subscription, or in the interactive TUI.
+Tested end-to-end with Claude Code 2.1.301, both headless (`claude -p`) and in the interactive TUI, running on DeepSeek's Anthropic-compatible API. Two cases passed: blocked, then the agent fixed the code and the stop was allowed (PASS); and the block limit was reached (RED). Logs are in `e2e/claude/`. Not yet tested on an official Anthropic subscription.
 
-- `init` adds a `Stop` hook to `.claude/settings.local.json`. This file is per-machine and not committed, and `init` makes sure it's gitignored. The hook contains an absolute path, so it never goes into the shared `.claude/settings.json`. Use `--claude-scope user` to put it in `~/.claude/settings.json` instead (respects `CLAUDE_CONFIG_DIR`). Other keys in the file are kept.
+First run in the interactive TUI: there's no separate hook approval. Hooks in `.claude/settings.local.json` run once you trust the folder.
+
+1. Claude Code's own first-run screens (theme, security notes) appear only on a brand-new Claude Code install.
+2. **"Accessing workspace … Is this a project you created or one you trust?"** The default is *No, exit*. Pick **Yes, I trust this folder**.
+3. Work as normal. When tests fail at a stop, you'll see `Ran 1 stop hook` / `Stop hook error: agentreceipt: you tried to finish, but npm test failed …`. "Error" is just how Claude Code labels a blocking stop hook. Claude then keeps working, and when it finishes you get a `Stop says:` message with the receipt. `/hooks` lists the hook.
+
+- `init` adds a `Stop` hook to `.claude/settings.local.json`. This file is per-machine and not committed, and `init` makes sure git ignores it (via `.git/info/exclude`, so your repo isn't changed). The hook contains an absolute path, so it never goes into the shared `.claude/settings.json`. Use `--claude-scope user` to put it in `~/.claude/settings.json` instead (respects `CLAUDE_CONFIG_DIR`). Other keys in the file are kept.
 - If tests fail, the hook returns `{"decision":"block","reason":"..."}`. Claude Code then keeps working, using the reason as feedback.
 - The claim comes from `last_assistant_message`, or from the last assistant text in `transcript_path` (JSONL).
 - `stop_hook_active` is used to avoid infinite loops. Continuations count toward `maxBlocks`, and a fresh turn (`stop_hook_active: false`) resets the count. Claude Code's own 8-continuation cap is a second backstop.

@@ -22,5 +22,7 @@
   - (b) 上限设为 1 → 拦一次后放行 → 生成 RED 收据；
   - (c) uninstall 后项目级和用户级 settings 都恢复原样，原有配置保留；我们自己建的空 .claude 目录也会删掉（这次实测发现并修好的小问题）。
   - 两次运行合计约 0.22 美元（Claude Code 按 Anthropic 价格估算，DeepSeek 实际扣费更低）。记录在 e2e/claude/，提交前确认过不含密钥。
-  - 还没测：Anthropic 官方订阅、交互界面（TUI）。
+  - **交互界面（TUI，用 tmux 驱动）也测通了**：Claude Code 不会单独让用户批准 hook，只要信任了这个文件夹，hook 就会运行。第一次运行看到的依次是：选主题 → 安全提示（这两步只有新装 Claude Code 才有）→「是否信任此文件夹」（默认选项是「No, exit」，要选「Yes, I trust this folder」）。之后谎报完成会显示「Stop hook error: agentreceipt: …npm test failed」（Claude Code 对拦截一律标成 error），Claude 接着改代码、跑测试，最后显示「Stop says:」加 PASS 收据。用 DeepSeek 时还会多弹一个 auto mode 计费提示，按回车关掉就行，官方订阅不会有这个提示。截屏在 e2e/claude/interactive-tui.txt。
+  - 按要求改了安装位置：Claude Code 的 hook 现在写到 .claude/settings.local.json（只在本机，不提交），并加到 .git/info/exclude 让 git 忽略，不改用户仓库里的文件；uninstall 也会清掉旧版本写进 .claude/settings.json 的条目。另外去掉了会留在项目里的 .bak 备份文件。
+  - 还没测：Anthropic 官方订阅。
 - 待办：init 交互体验打磨。

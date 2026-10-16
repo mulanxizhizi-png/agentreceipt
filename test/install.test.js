@@ -29,7 +29,8 @@ test('claude default install writes .claude/settings.local.json, gitignores it, 
   assert.equal(fs.readFileSync(path.join(root, '.claude/settings.json'), 'utf8'), '{"model":"x"}');
   execFileSync('git', ['check-ignore', '-q', '.claude/settings.local.json'], { cwd: root }); // throws if not ignored
   inst.install({ agent: 'claude', root, binPath: '/b/agentreceipt-hook' }); // idempotent gitignore
-  assert.equal(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), '.claude/settings.local.json\n');
+  assert.equal(fs.existsSync(path.join(root, '.gitignore')), false); // repo untouched
+  assert.equal(fs.readFileSync(path.join(root, '.git/info/exclude'), 'utf8').split('\n').filter((l) => l === '.claude/settings.local.json').length, 1);
   assert.throws(() => inst.install({ agent: 'claude', root, binPath: '/b/x', scope: 'project' }));
 });
 test('uninstall cleans settings.local.json and legacy settings.json entries', () => {
