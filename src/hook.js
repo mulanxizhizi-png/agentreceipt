@@ -89,7 +89,7 @@ async function handleStop(input, { agent = 'codex' } = {}) {
         decision: canBlock ? 'block' : 'allow',
         git: { head, base, commitsSinceBase }, fingerprint,
         config: { fingerprint: cfgFp, changedSinceLastVerified: configChanged, ...(configChanged && last.testCommand && last.testCommand !== cfg.testCommand ? { previousTestCommand: last.testCommand } : {}) },
-        warnings,
+        warnings, criteriaFiles: cfg.criteriaFiles,
       });
       // agentundo (optional): snapshot id of the verified state; for the user only, never in the block reason.
       const undo = recordUndo(root, receipt.status, receiptName(receipt));

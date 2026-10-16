@@ -8,19 +8,35 @@ const SCHEMA_VERSION = 1;
 // status: "green" (tests pass), "blocked" (stop refused), "red" (allowed stop despite failures: block limit hit)
 const NOTICE_ZH = '验证标准已变化，需复核';
 const NOTICE_EN = 'Verification criteria changed, review needed';
-const CRITERIA_FILE = /(^|\/)(\.agentreceipt\/config\.json|\.github\/workflows\/[^/]+\.ya?ml|package\.json|jest\.config\.[cm]?[jt]s|vitest\.config\.[cm]?[jt]s|pytest\.ini|tox\.ini|setup\.cfg|pyproject\.toml)$/;
+// Files that define what "the tests" are: runner configs and test entry points (Makefile targets,
+// package.json scripts, justfile recipes, nox/tox sessions, scripts/test*).
+const CRITERIA_FILE = /(^|\/)(\.agentreceipt\/config\.json|\.github\/workflows\/[^/]+\.ya?ml|package\.json|jest\.config\.[cm]?[jt]s|vitest\.config\.[cm]?[jt]s|pytest\.ini|tox\.ini|setup\.cfg|pyproject\.toml|conftest\.py|noxfile\.py|[Mm]akefile|GNUmakefile|[^/]+\.mk|[Jj]ustfile|\.justfile|Taskfile\.ya?ml|scripts\/test[^/]*)$/;
+
+// Minimal glob -> RegExp for config.criteriaFiles: ** (any dirs), * (within a segment), ?.
+function globRe(g) {
+  let re = '';
+  for (let i = 0; i < g.length; i++) {
+    const ch = g[i];
+    if (ch === '*' && g[i + 1] === '*') { re += g[i + 2] === '/' ? '(?:.*/)?' : '.*'; i += g[i + 2] === '/' ? 2 : 1; }
+    else if (ch === '*') re += '[^/]*';
+    else if (ch === '?') re += '[^/]';
+    else re += ch.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  }
+  return new RegExp(`^${re}$`);
+}
+function isCriteriaFile(p, extraGlobs = []) { return CRITERIA_FILE.test(p) || extraGlobs.some((g) => globRe(g).test(p)); }
 
 // Informational only: never changes status. Flags that what "passing" means may have moved.
-function criteriaChange(diff, config) {
+function criteriaChange(diff, config, criteriaFiles = []) {
   const reasons = [];
   if (diff.testFilesChanged && diff.testFilesChanged.length) reasons.push({ kind: 'test-files', files: diff.testFilesChanged });
   if (config && config.changedSinceLastVerified) reasons.push({ kind: 'config', previousTestCommand: config.previousTestCommand || null });
-  const cfgFiles = (diff.files || []).map((f) => f.path).filter((p) => CRITERIA_FILE.test(p) && !(config && config.changedSinceLastVerified && p.endsWith('.agentreceipt/config.json')));
+  const cfgFiles = (diff.files || []).map((f) => f.path).filter((p) => isCriteriaFile(p, criteriaFiles) && !(config && config.changedSinceLastVerified && p.endsWith('.agentreceipt/config.json')));
   if (cfgFiles.length) reasons.push({ kind: 'check-config-files', files: cfgFiles });
   return { changed: reasons.length > 0, ...(reasons.length ? { notice: NOTICE_EN, noticeZh: NOTICE_ZH } : {}), reasons, configFingerprint: (config && config.fingerprint) || null };
 }
 
-function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff, blockCount, maxBlocks, decision, error, git, fingerprint, config, warnings }) {
+function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff, blockCount, maxBlocks, decision, error, git, fingerprint, config, warnings, criteriaFiles, environment }) {
   const passed = test.exitCode === 0 && !test.timedOut;
   const verified = passed && !(fingerprint && fingerprint.changedDuringTests);
   const status = error ? 'error' : verified ? 'green' : decision === 'block' ? 'blocked' : 'red';
@@ -39,7 +55,7 @@ function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff
     ...(fingerprint ? { fingerprint } : {}),
     ...(config ? { config } : {}),
     warnings: warnings || [],
-    verificationCriteria: criteriaChange(diff, config),
+    verificationCriteria: criteriaChange(diff, config, Array.isArray(criteriaFiles) ? criteriaFiles : []),
     diff: { isRepo: diff.isRepo, base: diff.base || null, filesChanged: diff.files.length, insertions: diff.insertions, deletions: diff.deletions, files: diff.files, testFilesChanged: diff.testFilesChanged },
     blocks: { count: blockCount, max: maxBlocks },
     ...(error ? { error: String(error) } : {}),
@@ -85,4 +101,4 @@ function formatReceipt(r, { color = false } = {}) {
   return out.join('\n');
 }
 
-module.exports = { receiptName, NOTICE_EN, NOTICE_ZH, criteriaChange, SCHEMA_VERSION, buildReceipt, writeReceipt, formatReceipt };
+module.exports = { globRe, isCriteriaFile, receiptName, NOTICE_EN, NOTICE_ZH, criteriaChange, SCHEMA_VERSION, buildReceipt, writeReceipt, formatReceipt };

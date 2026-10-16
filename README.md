@@ -59,6 +59,7 @@ agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope lo
 | `testCommand` | detected | shell command run from the repo root; exit 0 = pass |
 | `timeoutSec` | 300 | longer runs are killed and count as a failure. Number > 0 |
 | `maxBlocks` | 3 | times per turn the agent can be sent back before it's allowed to stop (RED). Integer ≥ 0; 0 = receipts only, never block |
+| `criteriaFiles` | none | extra globs (`*`, `**`, `?`) for files that define your checks, e.g. `["ci/**/*.sh"]`. Changes to them add the "verification criteria changed" notice |
 
 ## What goes in git
 
@@ -93,6 +94,7 @@ Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hi
 - **Diff base:** changes are measured from the commit at the last allowed stop (or at `init`), so code the agent *committed* still shows up. `git.head` is the commit that was tested.
 - **Fingerprint:** the code on disk is hashed before and after the test run. If it changed while tests ran, the receipt is never green (blocked, or red at the limit).
 - **Full log:** the complete test output is saved next to the receipt (`tests.logPath`, capped at 50 MB). The receipt and the block message keep the start and the end of the output, so an early assertion isn't lost under noise.
+- **Verification criteria notice:** if the change touches files that define what "the tests" are, the receipt says *Verification criteria changed, review needed* (`verificationCriteria`). That covers runner configs and test entry points: `Makefile`/`*.mk`, `package.json` (scripts), `justfile`, `noxfile.py`, `tox.ini`, `pytest.ini`, `pyproject.toml`, `setup.cfg`, `conftest.py`, `scripts/test*`, CI workflows, `.agentreceipt/config.json`, and any `criteriaFiles` globs. It's a notice for you to review. It never blocks, and it doesn't stop an agent running with your permissions from bypassing the checks.
 - **Config warning:** if `.agentreceipt/config.json` changed since the last allowed stop (e.g. the test command was swapped), the receipt carries a warning and the agent/user sees it. It warns; it does not block.
 - Paths are read with `git -z`, so non-ASCII, spaces and renames are reported exactly.
 
