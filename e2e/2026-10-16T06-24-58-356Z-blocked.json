@@ -1,0 +1,31 @@
+{
+  "schemaVersion": 1,
+  "tool": "agentreceipt",
+  "createdAt": "2026-10-16T06:24:58.356Z",
+  "agent": "codex",
+  "sessionId": "01a14362-8a6b-7af3-b2af-dbc5fddb44c7",
+  "turnId": "01a14362-8f5c-7d92-8d9b-5e0c138988a2",
+  "status": "blocked",
+  "decision": "block",
+  "claim": "Done, all tests pass.",
+  "tests": {
+    "command": "npm test",
+    "passed": false,
+    "exitCode": 1,
+    "timedOut": false,
+    "durationMs": 381,
+    "outputTail": "\n> test\n> node test.js\n\nFAIL: add(2,3) = -1 expected 5\n"
+  },
+  "diff": {
+    "isRepo": true,
+    "filesChanged": 0,
+    "insertions": 0,
+    "deletions": 0,
+    "files": [],
+    "testFilesChanged": []
+  },
+  "blocks": {
+    "count": 1,
+    "max": 3
+  }
+}
