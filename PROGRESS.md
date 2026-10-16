@@ -1,6 +1,13 @@
 # agentreceipt 开发进度
 
-## v0.1.3（10 月 16 日晚，开发和调试）：和 agentundo 打通
+## v0.1.3（10 月 16 日晚，开发和调试）：Python 文档索引测试报告的两个发现
+- **验证入口文件纳入“验证标准已变化”提示（报告场景 13）**：新增 `Makefile`、`*.mk`、`justfile`、`noxfile.py`、`conftest.py`、`scripts/test*`、`Taskfile.yml`，原有的 `package.json`、`tox.ini`、`pytest.ini`、`pyproject.toml`、`setup.cfg` 也都在内。项目还可以在配置里用 `criteriaFiles`（glob）声明自己的验证规则文件。这只是提示，不拦截。报告里“把 Makefile 的 test 目标换成 echo”那种情况，现在收据还是绿色，但会提示“验证标准已变化，需复核”。
+- **可选的干净环境 `cleanEnv`（报告场景 12）**：开启后，验证时把 `PYTHONPYCACHEPREFIX` 指向一个新建的空临时目录，并设置 `PYTHONDONTWRITEBYTECODE=1`，旧的 pyc 就骗不过去了。复现“旧时间戳 pyc 和坏源码并存”：不开时是绿色（已写成测试，作为已知缺口的记录），开了以后变成 blocked/red。Python 项目的收据会记下解释器路径和版本。
+- 注意：上级派活时说的场景 12、13 和报告里的编号正好相反，这里按报告的编号写。
+- 这台机器上没有装 make，所以真用 `make test` 跑的那个测试会自动跳过；另外有一个不依赖 make 的测试，验证 Makefile 改动会触发提示。
+- README 写明已在 Linux 和 macOS 上测过（macOS 是用户用 Codex 在 Python 项目上实测的）。
+
+## v0.1.3（续）：和 agentundo 打通
 - 项目里装了 agentundo 时，每张收据都会记下验证那一刻对应的 agentundo 快照编号（JSON 里的 `undo` 字段）。绿色收据把这张快照标成“最后一次测试通过”；红色和 blocked 收据会多一行“Go back”，给出回到最后一次测试通过状态的命令，比如 `~/.agentundo/bin/agentundo restore 4`。这个命令只给用户看（收据和 PR 评论），不会写进发给 agent 的拦截理由。
 - 两个工具互不依赖：没装 agentundo 时收据和以前完全一样。调用 agentundo 有 8 秒超时，出任何错都忽略。设 `AGENTRECEIPT_NO_UNDO=1` 可以关掉。
 - 新增 4 个测试，包括跨工具端到端：两个都装上，先绿后红，再执行收据里的命令，确认回到绿色状态，并且收据文件没被恢复操作删掉。全部 67 个测试连跑 3 次都通过。

@@ -54,6 +54,7 @@ function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff
     ...(git ? { git } : {}),
     ...(fingerprint ? { fingerprint } : {}),
     ...(config ? { config } : {}),
+    ...(environment ? { environment } : {}),
     warnings: warnings || [],
     verificationCriteria: criteriaChange(diff, config, Array.isArray(criteriaFiles) ? criteriaFiles : []),
     diff: { isRepo: diff.isRepo, base: diff.base || null, filesChanged: diff.files.length, insertions: diff.insertions, deletions: diff.deletions, files: diff.files, testFilesChanged: diff.testFilesChanged },
@@ -89,6 +90,8 @@ function formatReceipt(r, { color = false } = {}) {
   if (r.fingerprint && r.fingerprint.changedDuringTests) out.push(c('31', ' Warning:  code changed while tests were running; result not trusted'));
   for (const w of r.warnings || []) out.push(c('33', ` Warning:  ${w}`));
   if (r.tests.logPath) out.push(` Log:      ${r.tests.logPath}`);
+  const py = r.environment && r.environment.python;
+  if (py && (py.executable || r.environment.cleanEnv)) out.push(` Python:   ${py.executable ? `${py.executable} ${py.version}` : '(not found)'}${r.environment.cleanEnv ? ' (clean bytecode cache)' : ''}`);
   if (r.undo) {
     out.push(` Snapshot: agentundo #${r.undo.snapshotId}${r.undo.lastKnownGood ? ' (last known good)' : ''}`);
     if (r.undo.restoreCommand) out.push(c('36', ` Go back:  ${r.undo.restoreCommand}`) + `  (last state where tests passed, #${r.undo.lastGreenSnapshotId})`);

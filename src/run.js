@@ -12,7 +12,7 @@ const LOG_CAP = 50 * 1024 * 1024; // full log on disk, capped
 // (not a pipe): many test runners call process.exit() right after printing, and output still
 // queued for a non-blocking pipe is then lost (Node drops it). File writes are synchronous, so
 // nothing is dropped. After the child closes we read head + tail from the file.
-function runTests(command, cwd, timeoutSec, { logFile } = {}) {
+function runTests(command, cwd, timeoutSec, { logFile, env: extraEnv } = {}) {
   return new Promise((resolve) => {
     const start = Date.now();
     let file = logFile, keep = !!logFile, fd = null;
@@ -42,7 +42,7 @@ function runTests(command, cwd, timeoutSec, { logFile } = {}) {
     };
     let child;
     const out = fd !== null ? fd : 'pipe';
-    try { child = spawn(command, { cwd, shell: true, stdio: ['ignore', out, out], detached: process.platform !== 'win32', env: { ...process.env, CI: '1' } }); }
+    try { child = spawn(command, { cwd, shell: true, stdio: ['ignore', out, out], detached: process.platform !== 'win32', env: { ...process.env, CI: '1', ...(extraEnv || {}) } }); }
     catch (e) { finish({ exitCode: null, timedOut: false, spawnError: String(e) }); return; }
     if (fd === null) { // fallback: no writable log location
       const add = (b) => { bytes += b.length; const s = b.toString(); if (head.length < HEAD) head += s.slice(0, HEAD - head.length); tail = (tail + s).slice(-TAIL); };

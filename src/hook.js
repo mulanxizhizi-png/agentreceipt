@@ -7,6 +7,7 @@ const { runTests } = require('./run');
 const { diffSummary, codeFingerprint, headSha, isAncestor, git: gitCmd } = require('./git');
 const { buildReceipt, writeReceipt, formatReceipt, receiptName } = require('./receipt');
 const { recordUndo } = require('./undo');
+const { prepareEnv } = require('./pyenv');
 const { getBlocks, setBlocks, withSessionLock, getLast, setLast } = require('./state');
 const { extractClaim } = require('./claim');
 
@@ -74,7 +75,9 @@ async function handleStop(input, { agent = 'codex' } = {}) {
       const stamp = new Date().toISOString().replace(/[:.]/g, '-') + '-' + crypto.randomBytes(3).toString('hex');
       const logFile = path.join(root, DIR, 'receipts', `${stamp}.log`);
       const fpBefore = codeFingerprint(root);
-      const test = await runTests(cfg.testCommand, root, cfg.timeoutSec, { logFile });
+      const ctx = prepareEnv(root, cfg);
+      let test;
+      try { test = await runTests(cfg.testCommand, root, cfg.timeoutSec, { logFile, env: ctx.env }); } finally { ctx.cleanup(); }
       const fpAfter = codeFingerprint(root);
       if (test.spawnError) return errorResult({ root, agent, input, error: `test command could not be started: ${test.spawnError}`, testCommand: cfg.testCommand, test });
       if (test.exitCode === 127) return errorResult({ root, agent, input, error: `test command not found (exit 127): ${test.outputTail.trim().split('\n').pop()}`, testCommand: cfg.testCommand, test });
@@ -89,7 +92,7 @@ async function handleStop(input, { agent = 'codex' } = {}) {
         decision: canBlock ? 'block' : 'allow',
         git: { head, base, commitsSinceBase }, fingerprint,
         config: { fingerprint: cfgFp, changedSinceLastVerified: configChanged, ...(configChanged && last.testCommand && last.testCommand !== cfg.testCommand ? { previousTestCommand: last.testCommand } : {}) },
-        warnings, criteriaFiles: cfg.criteriaFiles,
+        warnings, criteriaFiles: cfg.criteriaFiles, environment: ctx.environment,
       });
       // agentundo (optional): snapshot id of the verified state; for the user only, never in the block reason.
       const undo = recordUndo(root, receipt.status, receiptName(receipt));
