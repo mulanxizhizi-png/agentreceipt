@@ -76,7 +76,7 @@ function writeReceipt(root, receipt) {
 
 function formatReceipt(r, { color = false } = {}) {
   const c = (code, s) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
-  const badge = { green: c('32;1', 'PASS  verified'), blocked: c('33;1', 'BLOCKED  agent sent back to work'), red: c('31;1', r.agent === 'ci' ? 'RED  tests failing' : 'RED  stopped with failing tests'), error: c('35;1', 'ERROR  agentreceipt could not verify (stop allowed)') }[r.status];
+  const badge = { green: c('32;1', 'PASS  verified'), blocked: c('33;1', 'BLOCKED  agent sent back to work'), red: c('31;1', r.agent === 'ci' ? 'RED  tests failing' : 'RED  stopped with failing tests'), error: c('35;1', r.agent === 'ci' ? 'ERROR  agentreceipt could not verify (check failed)' : 'ERROR  agentreceipt could not verify (stop allowed)') }[r.status];
   const line = '-'.repeat(44);
   const out = [line, ' AGENT RECEIPT', line,
     ` Status:   ${badge}`,

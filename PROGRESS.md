@@ -1,5 +1,11 @@
 # agentreceipt 开发进度
 
+## v0.1.5（10 月 16 日晚，开发和调试）：两个小修复 + CI 跑 agentundo 联动测试
+- **CI 里的错误措辞**：Action 生成的 error 收据（PR 评论、日志、Step Summary）原来写的是本地 hook 的“stop allowed”，现在改成“could not verify (check failed)”。本地 hook 的措辞不变。加了测试。
+- **action.yml**：`status` 输出的说明列出 green / red / error 三种状态，注明 red 和 error 都会让检查失败。
+- **agentundo 联动测试在 CI 里实际运行**：新增 `.github/workflows/test.yml`，同时 checkout 本仓库和 `mulanxizhizi-png/agentundo@v0.1.1`，设置 `AGENTUNDO_SRC` 和 `AGENTRECEIPT_REQUIRE_UNDO=1`。设了这个变量但找不到 agentundo 时，测试直接失败，不再悄悄跳过。本地运行：把 agentundo 克隆到本仓库旁边（`../agentundo`），或者用 `AGENTUNDO_SRC` 指定路径。
+- 版本号改为 0.1.5；v0.1.4 以 `594e487` 为准，这次只追加了新提交。80 个测试在 `AGENTRECEIPT_REQUIRE_UNDO=1` 下连跑 10 次都通过（0 跳过）。
+
 ## v0.1.4（10 月 16 日晚，开发和调试）：生成产物不再算作改动
 - **部署复测发现的问题**：Python 项目如果没在 `.gitignore` 里忽略 `__pycache__`，跑测试会生成 `__pycache__/*.pyc`，代码指纹在测试前后不一致，第一次测试明明通过也被拦下。
 - **修复**：变化检测（测试中代码变化的指纹、改动文件统计、测试文件改动、验证标准变化提示）默认忽略生成产物：`__pycache__/`、`*.pyc`、`*.pyo`、`.pytest_cache/`、`.mypy_cache/`、`.ruff_cache/`、`.tox/`、`.nox/`、`*.egg-info/`、`node_modules/.cache`、`.coverage`、`coverage/`、`htmlcov/`、`.nyc_output`。项目可以用配置项 `ignore`（glob 数组）再加自己的规则，格式不对时会给出 error 收据。

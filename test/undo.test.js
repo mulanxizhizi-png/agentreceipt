@@ -10,6 +10,8 @@ const { formatReceipt } = require('../src/receipt');
 
 const UNDO_SRC = process.env.AGENTUNDO_SRC || path.resolve(__dirname, '..', '..', 'agentundo');
 const haveUndo = fs.existsSync(path.join(UNDO_SRC, 'bin', 'agentundo.js'));
+// CI sets AGENTRECEIPT_REQUIRE_UNDO=1 (after checking out agentundo) so a missing checkout fails instead of skipping.
+if (process.env.AGENTRECEIPT_REQUIRE_UNDO === '1' && !haveUndo) throw new Error(`AGENTRECEIPT_REQUIRE_UNDO=1 but agentundo not found at ${UNDO_SRC} (set AGENTUNDO_SRC)`);
 const TEST = `node -e "process.exit(require('fs').readFileSync('a.txt','utf8')==='good'?0:1)"`;
 
 function withUndoHome(fn) {

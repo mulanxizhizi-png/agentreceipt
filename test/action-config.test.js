@@ -64,6 +64,15 @@ test('invalid config: Action writes error receipt like the hook, comments it on 
   assert.equal(ci.error, local.error);
   assert.equal(store.comments.length, 1);
   assert.match(store.comments[0].body, /ERROR: could not verify/);
+  assert.match(store.comments[0].body, /check failed/); assert.doesNotMatch(store.comments[0].body, /stop allowed/);
   assert.match(store.comments[0].body, /ignore must be an array of glob strings/);
   assert.match(fs.readFileSync(a.sum, 'utf8'), /ignore must be an array/);
+});
+
+test('CI error wording: Action receipt says check failed, hook keeps stop allowed', () => {
+  const { formatReceipt, buildReceipt } = require('../src/receipt');
+  const mk = (agent) => formatReceipt(buildReceipt({ agent, testCommand: null, test: { exitCode: null, timedOut: false, durationMs: 0, outputTail: '' }, diff: { isRepo: true, files: [], insertions: 0, deletions: 0, testFilesChanged: [] }, blockCount: 0, maxBlocks: 0, decision: 'allow', error: 'bad config' }));
+  const ci = mk('ci'), local = mk('codex');
+  assert.match(ci, /check failed/); assert.doesNotMatch(ci, /stop allowed/);
+  assert.match(local, /stop allowed/);
 });

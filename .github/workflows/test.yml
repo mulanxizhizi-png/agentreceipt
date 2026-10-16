@@ -1,0 +1,19 @@
+name: test
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: agentreceipt }
+      # agentundo checkout so the cross-tool integration tests run instead of skipping
+      - uses: actions/checkout@v4
+        with: { repository: mulanxizhizi-png/agentundo, ref: v0.1.1, path: agentundo }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+      - run: python3 --version
+      - run: npm test
+        working-directory: agentreceipt
+        env:
+          AGENTUNDO_SRC: ${{ github.workspace }}/agentundo
+          AGENTRECEIPT_REQUIRE_UNDO: '1'
