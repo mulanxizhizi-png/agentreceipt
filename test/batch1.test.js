@@ -124,7 +124,7 @@ test('hook process never prints bare {} on failure; stderr carries the warning',
   const res = require('child_process').spawnSync(process.execPath, [BIN, 'hook', '--agent', 'codex'], { input: JSON.stringify({ cwd: bad, session_id: 's' }) });
   const out = JSON.parse(res.stdout.toString().trim());
   assert.match(out.systemMessage, /agentreceipt ERROR/); assert.match(res.stderr.toString(), /agentreceipt ERROR/);
-  const res2 = require('child_process').spawnSync(process.execPath, [BIN, 'hook'], { input: 'not json' });
+  const res2 = require('child_process').spawnSync(process.execPath, [BIN, 'hook'], { input: 'not json', cwd: tmpRepo({}) }); // not the agentreceipt checkout
   assert.match(JSON.parse(res2.stdout.toString().trim()).systemMessage, /invalid hook input JSON/);
 });
 
