@@ -32,7 +32,7 @@ You can review it again anytime with `/hooks`. Upgrading agentreceipt (re-runnin
 
 Tested end-to-end with Claude Code 2.1.301 in headless mode (`claude -p`), running on DeepSeek's Anthropic-compatible API (`deepseek-flash`). Two cases passed: blocked, then the agent fixed the code and the stop was allowed (PASS); and the block limit was reached (RED). Logs are in `e2e/claude/`. Not yet tested on an official Anthropic subscription, or in the interactive TUI.
 
-- `init` adds a `Stop` hook to `.claude/settings.json` in the repo. Use `--claude-scope user` to put it in `~/.claude/settings.json` instead (respects `CLAUDE_CONFIG_DIR`). Other keys in the file are kept.
+- `init` adds a `Stop` hook to `.claude/settings.local.json`. This file is per-machine and not committed, and `init` makes sure it's gitignored. The hook contains an absolute path, so it never goes into the shared `.claude/settings.json`. Use `--claude-scope user` to put it in `~/.claude/settings.json` instead (respects `CLAUDE_CONFIG_DIR`). Other keys in the file are kept.
 - If tests fail, the hook returns `{"decision":"block","reason":"..."}`. Claude Code then keeps working, using the reason as feedback.
 - The claim comes from `last_assistant_message`, or from the last assistant text in `transcript_path` (JSONL).
 - `stop_hook_active` is used to avoid infinite loops. Continuations count toward `maxBlocks`, and a fresh turn (`stop_hook_active: false`) resets the count. Claude Code's own 8-continuation cap is a second backstop.
@@ -41,7 +41,7 @@ Tested end-to-end with Claude Code 2.1.301 in headless mode (`claude -p`), runni
 ## Options
 
 ```
-agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope project|user] [--timeout 300] [--max-blocks 3]
+agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope local|user] [--timeout 300] [--max-blocks 3]
 ```
 
 `.agentreceipt/config.json`:
@@ -79,6 +79,6 @@ Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hi
 npx github:mulanxizhizi-png/agentreceipt uninstall
 ```
 
-This removes the hooks from `~/.codex/hooks.json`, `.claude/settings.json` and `~/.claude/settings.json` (files without an agentreceipt hook are left untouched), and deletes `~/.agentreceipt/runtime` and `~/.agentreceipt/bin`. Delete `.agentreceipt/` in your repo yourself if you don't want the receipts.
+This removes the hooks from `~/.codex/hooks.json`, `.claude/settings.local.json`, `~/.claude/settings.json` and any legacy entry in `.claude/settings.json` (files without an agentreceipt hook are left untouched), and deletes `~/.agentreceipt/runtime` and `~/.agentreceipt/bin`. Delete `.agentreceipt/` in your repo yourself if you don't want the receipts.
 
 MIT licensed.

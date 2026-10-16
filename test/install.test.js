@@ -20,12 +20,28 @@ test('codex install writes CODEX_HOME/hooks.json, uninstall cleans up', () => {
   inst.uninstall({ agent: 'codex', root: home, env });
   assert.equal(fs.existsSync(f), false);
 });
-test('claude install writes .claude/settings.json preserving keys', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-'));
-  fs.mkdirSync(path.join(root, '.claude')); fs.writeFileSync(path.join(root, '.claude/settings.json'), '{"model":"x"}');
-  inst.install({ agent: 'claude', root, binPath: '/b/agentreceipt.js', timeoutSec: 60 });
-  const doc = JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json'), 'utf8'));
-  assert.equal(doc.model, 'x'); assert.match(doc.hooks.Stop[0].hooks[0].command, / claude$/);
+test('claude default install writes .claude/settings.local.json, gitignores it, never touches settings.json', () => {
+  const { tmpRepo } = require('./helpers'); const { execFileSync } = require('child_process');
+  const root = tmpRepo({ '.claude/settings.json': '{"model":"x"}' });
+  const f = inst.install({ agent: 'claude', root, binPath: '/b/agentreceipt-hook' });
+  assert.equal(f, path.join(root, '.claude/settings.local.json'));
+  assert.match(JSON.parse(fs.readFileSync(f, 'utf8')).hooks.Stop[0].hooks[0].command, / claude$/);
+  assert.equal(fs.readFileSync(path.join(root, '.claude/settings.json'), 'utf8'), '{"model":"x"}');
+  execFileSync('git', ['check-ignore', '-q', '.claude/settings.local.json'], { cwd: root }); // throws if not ignored
+  inst.install({ agent: 'claude', root, binPath: '/b/agentreceipt-hook' }); // idempotent gitignore
+  assert.equal(fs.readFileSync(path.join(root, '.gitignore'), 'utf8'), '.claude/settings.local.json\n');
+  assert.throws(() => inst.install({ agent: 'claude', root, binPath: '/b/x', scope: 'project' }));
+});
+test('uninstall cleans settings.local.json and legacy settings.json entries', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cl-'));
+  fs.mkdirSync(path.join(root, '.claude'));
+  const legacy = { model: 'x', hooks: { Stop: [{ hooks: [{ type: 'command', command: '"/usr/bin/node" "/h/.agentreceipt/runtime/0.1.0/bin/agentreceipt.js" hook --agent claude' }] }] } };
+  fs.writeFileSync(path.join(root, '.claude/settings.json'), JSON.stringify(legacy));
+  inst.install({ agent: 'claude', root, binPath: '/b/agentreceipt-hook' });
+  assert.ok(inst.uninstall({ agent: 'claude', root, scope: 'local' }));
+  assert.ok(inst.uninstall({ agent: 'claude', root, scope: 'project' }));
+  assert.equal(fs.existsSync(path.join(root, '.claude/settings.local.json')), false);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(root, '.claude/settings.json'), 'utf8')), { model: 'x' });
 });
 test('removeRuntime deletes runtime and empty home', () => {
   const home = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'arh-')), '.agentreceipt');

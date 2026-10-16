@@ -65,9 +65,25 @@ function removeStopHook(doc) {
 }
 
 function codexHooksPath(env = process.env) { return path.join(env.CODEX_HOME || path.join(os.homedir(), '.codex'), 'hooks.json'); }
-function claudeSettingsPath(root, scope = 'project', env = process.env) {
+// scope: 'local' (default, .claude/settings.local.json: per-machine, not committed),
+//        'user'  (~/.claude/settings.json),
+//        'project' (.claude/settings.json: legacy, uninstall only; the hook has an absolute path
+//                   that would break teammates if committed).
+function claudeSettingsPath(root, scope = 'local', env = process.env) {
   if (scope === 'user') return path.join(env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'settings.json');
-  return path.join(root, '.claude', 'settings.json');
+  if (scope === 'project') return path.join(root, '.claude', 'settings.json');
+  return path.join(root, '.claude', 'settings.local.json');
+}
+
+// Make sure .claude/settings.local.json is gitignored (Claude Code does this itself only when *it* writes the file).
+function ensureGitignored(root, rel = '.claude/settings.local.json') {
+  const { execFileSync } = require('child_process');
+  try { execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' }); } catch { return false; }
+  try { execFileSync('git', ['check-ignore', '-q', rel], { cwd: root, stdio: 'ignore' }); return false; } catch { /* not ignored */ }
+  const gi = path.join(root, '.gitignore');
+  const cur = fs.existsSync(gi) ? fs.readFileSync(gi, 'utf8') : '';
+  fs.writeFileSync(gi, cur + (cur && !cur.endsWith('\n') ? '\n' : '') + rel + '\n');
+  return true;
 }
 
 function writeHooks(file, doc) {
@@ -76,13 +92,15 @@ function writeHooks(file, doc) {
   fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
 }
 
-function install({ agent, root, binPath, scope = 'project', env = process.env }) {
+function install({ agent, root, binPath, scope = 'local', env = process.env }) {
+  if (agent === 'claude' && scope === 'project') throw new Error('Refusing to write the hook to committed .claude/settings.json; use --claude-scope local or user');
   const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env);
+  if (agent === 'claude' && scope === 'local') ensureGitignored(root);
   writeHooks(file, upsertStopHook(readJson(file), hookCommand(binPath, agent), HOOK_TIMEOUT));
   return file;
 }
 
-function uninstall({ agent, root, scope = 'project', env = process.env }) {
+function uninstall({ agent, root, scope = 'local', env = process.env }) {
   const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root, scope, env);
   if (!fs.existsSync(file)) return null;
   const before = JSON.stringify(readJson(file));
@@ -91,7 +109,7 @@ function uninstall({ agent, root, scope = 'project', env = process.env }) {
   if (!Object.keys(doc).length) {
     fs.unlinkSync(file);
     // drop a project .claude/ dir we created and left empty
-    if (agent === 'claude' && scope === 'project') { try { fs.rmdirSync(path.dirname(file)); } catch {} }
+    if (agent === 'claude' && scope !== 'user') { try { fs.rmdirSync(path.dirname(file)); } catch {} }
   } else fs.writeFileSync(file, JSON.stringify(doc, null, 2) + '\n');
   return file;
 }
@@ -103,4 +121,4 @@ function removeRuntime(env = process.env) {
   try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
 }
 
-module.exports = { HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath };
+module.exports = { HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, ensureGitignored };

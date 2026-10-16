@@ -43,7 +43,7 @@ async function init(args) {
   const agents = agentArg === 'all' ? ['codex', 'claude'] : agentArg.split(',');
   const binPath = inst.installRuntime();
   console.log(`Config: ${path.join(root, DIR, 'config.json')}`);
-  for (const a of agents) console.log(`Stop hook (${a}): ${inst.install({ agent: a, root, binPath, scope: flag(args, '--claude-scope', 'project') })}`);
+  for (const a of agents) console.log(`Stop hook (${a}): ${inst.install({ agent: a, root, binPath, scope: flag(args, '--claude-scope', 'local') })}`);
   if (agents.includes('codex')) console.log('Codex: open /hooks once in Codex to review and trust the agentreceipt hook.');
   console.log('Done. Your agent now has to show a receipt before it can say "done".');
 }
@@ -63,7 +63,7 @@ async function main() {
     case 'last': return last();
     case 'uninstall': {
       const root = findRoot(process.cwd());
-      for (const [a, scope] of [['codex'], ['claude', 'project'], ['claude', 'user']]) {
+      for (const [a, scope] of [['codex'], ['claude', 'local'], ['claude', 'project'], ['claude', 'user']]) {
         const f = inst.uninstall({ agent: a, root, scope }); if (f) console.log(`Removed hook from ${f}`);
       }
       inst.removeRuntime();
@@ -74,7 +74,7 @@ async function main() {
     default:
       console.log(`agentreceipt ${inst.VERSION}
 Usage:
-  agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope project|user] [--timeout 300] [--max-blocks 3]
+  agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope local|user] [--timeout 300] [--max-blocks 3]
   agentreceipt last        print the latest receipt
   agentreceipt uninstall   remove the Stop hooks
   agentreceipt hook        (called by the agent's Stop hook)`);
