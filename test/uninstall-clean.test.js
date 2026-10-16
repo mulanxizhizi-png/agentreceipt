@@ -78,3 +78,48 @@ test('uninstall --purge --yes deletes receipts everywhere', () => {
   for (const p of [A, B]) { assert.deepEqual(ls(p), ['config.json']); assert.deepEqual(own(p), ['.agentreceipt/config.json']); }
   assert.equal(fs.existsSync(path.join(env.AGENTRECEIPT_HOME, 'bin')), false);
 });
+
+// ---- regression: deploy retest of 22c2c9e ----
+const PTY = path.join(__dirname, 'fixtures', 'pty-answer.py');
+function ptyRun(args, cwd, env, answer) {
+  return spawnSync('python3', [PTY, answer, process.execPath, BIN, ...args], { cwd, env, encoding: 'utf8', timeout: 20000 });
+}
+function abc() {
+  const env = mkenv(); const [A, B, C] = [tmpRepo(PKG), tmpRepo(PKG), tmpRepo(PKG)];
+  for (const p of [A, B, C]) { assert.equal(cli(['init'], p, env).status, 0); stop(env, p); }
+  assert.equal(cli(['uninstall', '--global'], A, env).status, 0);
+  assert.equal(cli(['init'], C, env).status, 0); stop(env, C);
+  return { env, A, B, C };
+}
+const has = (p, n) => fs.existsSync(path.join(p, '.agentreceipt', n));
+
+test('A/B/C repro: --purge without TTY and without --yes refuses (even as the only registered project)', () => {
+  const { env, B, C } = abc();
+  const r = spawnSync(process.execPath, [BIN, 'uninstall', '--purge'], { cwd: C, env, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  assert.notEqual(r.status, 0); assert.match(r.stderr, /Refusing/);
+  assert.ok(r.stderr.includes(B), 'receipts-only project B is listed');
+  assert.ok(has(C, 'receipts') && has(C, 'state') && has(B, 'receipts'));
+  assert.ok(fs.existsSync(path.join(C, '.claude', 'settings.local.json')), 'C hook untouched');
+});
+
+test('A/B/C repro: --global keeps B as receipts-only; --purge --yes deletes B and C receipts', () => {
+  const { env, A, B, C } = abc();
+  assert.deepEqual(inst.readReceiptsOnly(env), [B].sort());
+  const r = cli(['uninstall', '--purge', '--yes'], C, env);
+  assert.equal(r.status, 0, r.stderr);
+  for (const p of [A, B, C]) assert.equal(has(p, 'receipts'), false, p);
+  assert.deepEqual(own(B), ['.agentreceipt/config.json']);
+  assert.deepEqual(inst.readReceiptsOnly(env), []);
+});
+
+test('A/B/C repro: real pseudo-terminal, answer n -> nothing changed; answer y -> purged', () => {
+  const { env, B, C } = abc();
+  let r = ptyRun(['uninstall', '--purge'], C, env, 'n');
+  assert.match(r.stdout, /will delete/); assert.ok(r.stdout.includes(B)); assert.match(r.stdout, /Proceed\? \[y\/N\]/);
+  assert.match(r.stdout, /Aborted; nothing changed/); assert.match(r.stdout, /EXIT 1/);
+  assert.ok(has(C, 'receipts') && has(B, 'receipts'));
+  assert.ok(fs.existsSync(path.join(C, '.claude', 'settings.local.json')));
+  r = ptyRun(['uninstall', '--purge'], C, env, 'y');
+  assert.match(r.stdout, /EXIT 0/, r.stdout);
+  assert.equal(has(C, 'receipts'), false); assert.equal(has(B, 'receipts'), false);
+});

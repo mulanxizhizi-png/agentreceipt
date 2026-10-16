@@ -204,11 +204,20 @@ function uninstall({ agent, root, scope = 'local', env = process.env }) {
 // Registry of projects that use the shared runtime/global hooks, so uninstalling one project
 // doesn't break another.
 function registryPath(env = process.env) { return path.join(homeDir(env), 'projects.json'); }
-function readRegistry(env = process.env) { try { const r = JSON.parse(fs.readFileSync(registryPath(env), 'utf8')); return Array.isArray(r.projects) ? r.projects : []; } catch { return []; } }
-function writeRegistry(list, env = process.env) {
+function readRegFile(env) { try { const r = JSON.parse(fs.readFileSync(registryPath(env), 'utf8')); return { projects: Array.isArray(r.projects) ? r.projects : [], receiptsOnly: Array.isArray(r.receiptsOnly) ? r.receiptsOnly : [] }; } catch { return { projects: [], receiptsOnly: [] }; } }
+function readRegistry(env = process.env) { return readRegFile(env).projects; }
+// Projects uninstalled by --global whose receipts were kept; --purge still needs to find them.
+function readReceiptsOnly(env = process.env) { return readRegFile(env).receiptsOnly; }
+function writeReg({ projects, receiptsOnly }, env = process.env) {
+  const p = [...new Set(projects)].sort();
+  const r = [...new Set(receiptsOnly)].filter((x) => !p.includes(x)).sort();
+  if (!p.length && !r.length) { fs.rmSync(registryPath(env), { force: true }); return; }
   fs.mkdirSync(homeDir(env), { recursive: true });
-  fs.writeFileSync(registryPath(env), JSON.stringify({ projects: [...new Set(list)].sort() }, null, 2) + '\n');
+  fs.writeFileSync(registryPath(env), JSON.stringify({ projects: p, receiptsOnly: r }, null, 2) + '\n');
 }
+function writeRegistry(list, env = process.env) { writeReg({ projects: list, receiptsOnly: readReceiptsOnly(env) }, env); }
+// After --global: no project has hooks any more; only projects with kept receipts stay listed.
+function setReceiptsOnly(list, env = process.env) { writeReg({ projects: [], receiptsOnly: list }, env); }
 function registerProject(root, env = process.env) { writeRegistry([...readRegistry(env), path.resolve(root)], env); }
 // Removes `root` and any entry whose project no longer has .agentreceipt/config.json. Returns remaining projects.
 function unregisterProject(root, env = process.env) {
@@ -252,8 +261,8 @@ function removeRuntime(env = process.env) {
   const home = homeDir(env);
   fs.rmSync(path.join(home, 'runtime'), { recursive: true, force: true });
   fs.rmSync(path.join(home, 'bin'), { recursive: true, force: true });
-  fs.rmSync(registryPath(env), { force: true });
+  writeReg({ projects: [], receiptsOnly: readReceiptsOnly(env) }, env); // keep receipts-only entries
   try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
 }
 
-module.exports = { cleanProjectData, setExcludes, readRegistry, registerProject, unregisterProject, excludePath, shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };
+module.exports = { readReceiptsOnly, setReceiptsOnly, cleanProjectData, setExcludes, readRegistry, registerProject, unregisterProject, excludePath, shQuote, readJsonStrict, isManaged, preflight, targetFile, backupFile, STATUS_MESSAGE, HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath, addExcludes, removeExcludes, REPO_EXCLUDES, BLOCK_START, BLOCK_END };

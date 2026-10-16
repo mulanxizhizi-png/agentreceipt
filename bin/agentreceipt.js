@@ -83,18 +83,21 @@ async function main() {
       // --purge (implies --global): receipts are deleted everywhere too; needs confirmation or --yes.
       const root = findRoot(process.cwd());
       const purge = args.includes('--purge');
-      const others = inst.readRegistry().filter((p) => p !== path.resolve(root) && fs.existsSync(p));
+      const here = path.resolve(root);
+      const others = inst.readRegistry().filter((p) => p !== here && fs.existsSync(p));
+      const receiptsOnly = inst.readReceiptsOnly().filter((p) => p !== here && !others.includes(p) && fs.existsSync(path.join(p, DIR, 'receipts')));
       const global = purge || args.includes('--global') || others.length === 0;
-      if (purge && others.length) {
-        const list = [root, ...others].map((p) => `  - ${p}`).join('\n');
+      if (purge) {
+        // --purge always confirms, however many projects there are.
+        const list = [here, ...others, ...receiptsOnly].map((p) => `  - ${p}`).join('\n');
         if (!args.includes('--yes')) {
-          if (!process.stdin.isTTY) {
-            console.error(`agentreceipt: --purge deletes receipts in these projects:\n${list}\nRefusing without confirmation (not a terminal). Re-run with --yes to proceed.`);
+          if (!process.stdin.isTTY || !process.stdout.isTTY) {
+            console.error(`agentreceipt: --purge deletes hooks, state, logs and receipts in these projects:\n${list}\nRefusing without confirmation (not a terminal). Re-run with --yes to proceed.`);
             process.exitCode = 1; return;
           }
-          console.log(`--purge will delete receipts, state and logs in:\n${list}`);
+          console.log(`--purge will delete hooks, state, logs and receipts in:\n${list}`);
           const a = await ask('Proceed? [y/N] ');
-          if (!/^y(es)?$/i.test(a)) { console.log('Aborted; nothing changed.'); return; }
+          if (!/^y(es)?$/i.test(a)) { console.log('Aborted; nothing changed.'); process.exitCode = 1; return; }
         }
       }
       let failed = false;
@@ -117,7 +120,13 @@ async function main() {
       if (!global) {
         console.log(`Kept the shared runtime and global hooks: ${others.length} other project${others.length > 1 ? 's' : ''} still use${others.length > 1 ? '' : 's'} agentreceipt. Run \`agentreceipt uninstall --global\` to remove everything.`);
       } else {
-        for (const p of others) { try { doProject(p, !purge); } catch (e) { failed = true; console.error(`agentreceipt: skipped ${p}: ${e.message}`); } }
+        const kept = [];
+        for (const p of others) {
+          try { doProject(p, !purge); if (!purge && fs.existsSync(path.join(p, DIR, 'receipts'))) kept.push(p); }
+          catch (e) { failed = true; console.error(`agentreceipt: skipped ${p}: ${e.message}`); }
+        }
+        if (purge) for (const p of receiptsOnly) { try { doProject(p, false); } catch (e) { failed = true; console.error(`agentreceipt: skipped ${p}: ${e.message}`); } }
+        inst.setReceiptsOnly(purge ? [] : [...receiptsOnly, ...kept]);
         const g = [];
         for (const [a, sc] of [['codex'], ['claude', 'user']]) { const f = tryUninstall(a, sc); if (f) g.push(`hook in ${f}`); }
         if (failed) { console.error('agentreceipt: runtime kept because a hook could not be removed.'); process.exitCode = 1; }

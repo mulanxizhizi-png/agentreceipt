@@ -138,6 +138,6 @@ By default this only affects the **current project**: it removes the hook from `
 The shared pieces (the Codex hook in `~/.codex/hooks.json`, the hook in `~/.claude/settings.json`, and `~/.agentreceipt/runtime` + `bin`) are used by every project you ran `init` in, so they are kept while another project still has agentreceipt set up, and removed automatically when you uninstall the last one. Files without an agentreceipt hook are left untouched; backups of edited settings stay in `~/.agentreceipt/backups/`.
 
 - `uninstall --global` removes the shared pieces right away. The current project is cleaned as above; every other registered project loses its hook, state and logs but **keeps its receipts**, and keeps the `.git/info/exclude` rule for `.agentreceipt/receipts/` so `git status` stays clean there.
-- `uninstall --purge` does the same and also deletes receipts in every project. It lists the affected projects and asks for confirmation; pass `--yes` to skip the prompt. Without a terminal and without `--yes` it refuses and changes nothing.
+- `uninstall --purge` does the same and also deletes receipts in every project. It always lists the affected projects (including ones whose receipts were kept by an earlier `--global`) and asks for confirmation, even when only one project is involved; pass `--yes` to skip the prompt. Answering anything but `y` aborts with exit code 1. Without a terminal and without `--yes` it refuses (exit 1) and changes nothing.
 
 MIT licensed.
