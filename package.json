@@ -1,12 +1,42 @@
 {
   "name": "agentreceipt",
   "version": "0.1.0",
-  "description": "Make your coding agent show a receipt before it says \"done\". Stop hook for Codex and Claude Code that runs your tests and checks the diff.",
-  "bin": { "agentreceipt": "bin/agentreceipt.js" },
-  "files": ["bin", "src", "README.md", "LICENSE"],
-  "scripts": { "test": "node --test test/" },
-  "engines": { "node": ">=18" },
+  "description": "Make your coding agent show a receipt before it says \"done\": a Stop hook for Codex and Claude Code that runs your tests, checks the git diff, and sends the agent back to work if they fail.",
+  "bin": {
+    "agentreceipt": "bin/agentreceipt.js"
+  },
+  "files": [
+    "bin/",
+    "src/",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node --test test/"
+  },
+  "engines": {
+    "node": ">=16"
+  },
   "license": "MIT",
-  "repository": "github:mulanxizhizi-png/agentreceipt",
-  "keywords": ["codex", "claude-code", "agent", "hooks", "testing"]
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mulanxizhizi-png/agentreceipt.git"
+  },
+  "keywords": [
+    "codex",
+    "claude-code",
+    "coding-agent",
+    "ai-agent",
+    "hooks",
+    "stop-hook",
+    "testing",
+    "verification",
+    "receipt",
+    "cli"
+  ],
+  "author": "Zjing (https://github.com/mulanxizhizi-png)",
+  "homepage": "https://agentreceipt.netlify.app",
+  "bugs": {
+    "url": "https://github.com/mulanxizhizi-png/agentreceipt/issues"
+  }
 }

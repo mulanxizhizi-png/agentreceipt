@@ -4,7 +4,7 @@
 
 agentreceipt adds a Stop hook to your coding agent. When the agent tries to finish, the hook runs your tests and checks the git diff. If the tests fail, the agent is sent back to work with the failure output. After a set number of blocks it's allowed to stop, and the receipt is marked **RED**.
 
-![red receipt](e2e/red-receipt.png)
+![red receipt](https://raw.githubusercontent.com/mulanxizhizi-png/agentreceipt/main/e2e/red-receipt.png)
 
 *Real output from Codex 0.163.0: the agent claimed "all tests pass", got blocked once, then stopped with the tests still failing.*
 
@@ -30,7 +30,7 @@ You can review it again anytime with `/hooks`. Upgrading agentreceipt (re-runnin
 
 ## Claude Code (experimental)
 
-Tested end-to-end with Claude Code 2.1.301, both headless (`claude -p`) and in the interactive TUI, running on DeepSeek's Anthropic-compatible API. Two cases passed: blocked, then the agent fixed the code and the stop was allowed (PASS); and the block limit was reached (RED). Logs are in `e2e/claude/`. Not yet tested on an official Anthropic subscription.
+Tested end-to-end with Claude Code 2.1.301, both headless (`claude -p`) and in the interactive TUI, running on DeepSeek's Anthropic-compatible API. Two cases passed: blocked, then the agent fixed the code and the stop was allowed (PASS); and the block limit was reached (RED). Logs are in [`e2e/claude/`](https://github.com/mulanxizhizi-png/agentreceipt/tree/main/e2e/claude). Not yet tested on an official Anthropic subscription.
 
 First run in the interactive TUI: there's no separate hook approval. Hooks in `.claude/settings.local.json` run once you trust the folder.
 

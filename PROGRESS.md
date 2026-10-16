@@ -25,4 +25,5 @@
   - **交互界面（TUI，用 tmux 驱动）也测通了**：Claude Code 不会单独让用户批准 hook，只要信任了这个文件夹，hook 就会运行。第一次运行看到的依次是：选主题 → 安全提示（这两步只有新装 Claude Code 才有）→「是否信任此文件夹」（默认选项是「No, exit」，要选「Yes, I trust this folder」）。之后谎报完成会显示「Stop hook error: agentreceipt: …npm test failed」（Claude Code 对拦截一律标成 error），Claude 接着改代码、跑测试，最后显示「Stop says:」加 PASS 收据。用 DeepSeek 时还会多弹一个 auto mode 计费提示，按回车关掉就行，官方订阅不会有这个提示。截屏在 e2e/claude/interactive-tui.txt。
   - 按要求改了安装位置：Claude Code 的 hook 现在写到 .claude/settings.local.json（只在本机，不提交），并加到 .git/info/exclude 让 git 忽略，不改用户仓库里的文件；uninstall 也会清掉旧版本写进 .claude/settings.json 的条目。另外去掉了会留在项目里的 .bak 备份文件。
   - 还没测：Anthropic 官方订阅。
-- 待办：init 交互体验打磨。
+- npm 发布准备好了（**还没发布**）：package.json 补齐了 files 白名单（只打包 bin/、src/、README、LICENSE，不含 e2e、测试、spike）、engines（node>=16，实测 Node 16 和 20 都能跑）、MIT 许可（版权人 Zjing / mulanxizhizi-png）、主页、仓库、问题反馈地址、关键词和描述。npm pack 出来 13 个文件，压缩后 11.7 kB。在干净目录里装 tarball 跑了一遍 init → hook 拦截 → last → uninstall，全部正常；npx github: 安装也确认还能用。README 里的图片改成绝对链接，npm 页面上也能显示。
+- 待办：init 交互体验打磨；Zjing 网络方便时 npm publish。
