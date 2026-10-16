@@ -15,4 +15,5 @@
   - 测试后 Codex 配置已清理干净。
 - 未完成 / 阻塞：
   - Claude Code 实测需要 Zjing 私聊帮忙登录一次。
-- 明天（第 2 天）：init 交互体验打磨；考虑升级后 hook 命令路径变化需重新信任的问题（路径里带版本号）。
+- 升级不再需要重新信任：hook 命令固定指向 ~/.agentreceipt/bin/agentreceipt-hook（一个转发脚本），升级时只改脚本里指向的版本，Codex 看到的命令文本不变。实测：0.1.0 信任一次 → 升到 0.1.1 重新 init → 启动 Codex 不再弹「Hooks need review」。没有用到模型额度。
+- 明天（第 2 天）：Claude Code 适配（按官方文档，不登录），init 交互体验打磨。

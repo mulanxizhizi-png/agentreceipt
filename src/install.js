@@ -17,11 +17,31 @@ function installRuntime(env = process.env) {
     for (const f of fs.readdirSync(path.join(PKG_ROOT, d))) fs.copyFileSync(path.join(PKG_ROOT, d, f), path.join(dest, d, f));
   }
   fs.copyFileSync(path.join(PKG_ROOT, 'package.json'), path.join(dest, 'package.json'));
-  return path.join(dest, 'bin', 'agentreceipt.js');
+  // drop older runtimes; the shim only ever points at the current one
+  for (const v of fs.readdirSync(path.join(homeDir(env), 'runtime'))) {
+    if (v !== VERSION) fs.rmSync(path.join(homeDir(env), 'runtime', v), { recursive: true, force: true });
+  }
+  return writeShim(path.join(dest, 'bin', 'agentreceipt.js'), env);
 }
 
-function hookCommand(binPath, agent) {
-  return `${JSON.stringify(process.execPath)} ${JSON.stringify(binPath)} hook --agent ${agent}`;
+// Stable entry point. The hook command in agent configs always points here, so its text
+// (which Codex hashes for trust) never changes across agentreceipt versions; only the shim's
+// target is rewritten on init/upgrade.
+function shimPath(env = process.env) { return path.join(homeDir(env), 'bin', 'agentreceipt-hook'); }
+function writeShim(target, env = process.env) {
+  const p = shimPath(env);
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, `#!/bin/sh\n# agentreceipt hook shim (rewritten by \`agentreceipt init\`)\nexec ${JSON.stringify(process.execPath)} ${JSON.stringify(target)} hook --agent "\${1:-codex}"\n`);
+  fs.chmodSync(p, 0o755);
+  return p;
+}
+
+// Fixed hook timeout (seconds) so the hook definition stays identical across repos/versions.
+// The per-repo test timeout (config.timeoutSec) is enforced inside the hook.
+const HOOK_TIMEOUT = 900;
+
+function hookCommand(shim, agent) {
+  return `${JSON.stringify(shim)} ${agent}`;
 }
 
 function readJson(p) { try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return {}; } }
@@ -56,7 +76,7 @@ function writeHooks(file, doc) {
 function install({ agent, root, binPath, timeoutSec, env = process.env }) {
   // hook timeout = test timeout + slack for git/diff
   const file = agent === 'codex' ? codexHooksPath(env) : claudeSettingsPath(root);
-  writeHooks(file, upsertStopHook(readJson(file), hookCommand(binPath, agent), timeoutSec + 30));
+  writeHooks(file, upsertStopHook(readJson(file), hookCommand(binPath, agent), HOOK_TIMEOUT));
   return file;
 }
 
@@ -71,7 +91,8 @@ function uninstall({ agent, root, env = process.env }) {
 function removeRuntime(env = process.env) {
   const home = homeDir(env);
   fs.rmSync(path.join(home, 'runtime'), { recursive: true, force: true });
+  fs.rmSync(path.join(home, 'bin'), { recursive: true, force: true });
   try { if (fs.existsSync(home) && !fs.readdirSync(home).length) fs.rmdirSync(home); } catch {}
 }
 
-module.exports = { removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath };
+module.exports = { HOOK_TIMEOUT, shimPath, writeShim, removeRuntime, homeDir, VERSION, installRuntime, hookCommand, upsertStopHook, removeStopHook, install, uninstall, codexHooksPath, claudeSettingsPath };

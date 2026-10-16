@@ -16,17 +16,17 @@ In your project (git repo):
 npx github:mulanxizhizi-png/agentreceipt init
 ```
 
-`init` finds your test command (`package.json` test via npm/pnpm/yarn/bun, pytest, cargo, go, `make test`), or asks you for it. It writes `.agentreceipt/config.json` and installs the hook. The runtime is copied to `~/.agentreceipt/runtime/` so the hook keeps working after npx clears its cache. Requires Node 18 or newer. No dependencies.
+`init` finds your test command (`package.json` test via npm/pnpm/yarn/bun, pytest, cargo, go, `make test`), or asks you for it. It writes `.agentreceipt/config.json` and installs the hook. The runtime is copied to `~/.agentreceipt/runtime/<version>/` (behind a stable shim in `~/.agentreceipt/bin/`) so the hook keeps working after npx clears its cache. Requires Node 18 or newer. No dependencies.
 
 ## Codex: trust the hook once
 
 Codex won't run a new hook until you trust it. The hook goes to `~/.codex/hooks.json` (user level). In repos without `.agentreceipt/config.json` it does nothing. The next time you start `codex`:
 
 1. Codex shows **"Hooks need review"**. Pick **1. Review hooks**. (2. *Trust all and continue* also works.)
-2. Select the `Stop` row, press **Enter**, check the command (it points at `~/.agentreceipt/runtime/.../agentreceipt.js hook --agent codex`), and press **t** to trust it.
+2. Select the `Stop` row, press **Enter**, check the command (`~/.agentreceipt/bin/agentreceipt-hook codex`), and press **t** to trust it.
 3. Press **Esc** twice and work as normal.
 
-You can review it again anytime with `/hooks`. Codex re-asks for trust whenever the hook command changes, for example after upgrading agentreceipt.
+You can review it again anytime with `/hooks`. Upgrading agentreceipt (re-running `init`) doesn't ask for trust again: the hook always calls a stable shim at `~/.agentreceipt/bin/agentreceipt-hook`, and only the shim's target changes.
 
 ## Claude Code (experimental, untested)
 
@@ -73,6 +73,6 @@ Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hi
 npx github:mulanxizhizi-png/agentreceipt uninstall
 ```
 
-This removes the hooks from `~/.codex/hooks.json` and `.claude/settings.json`, and deletes `~/.agentreceipt/runtime`. Delete `.agentreceipt/` in your repo yourself if you don't want the receipts.
+This removes the hooks from `~/.codex/hooks.json` and `.claude/settings.json`, and deletes `~/.agentreceipt/runtime` and `~/.agentreceipt/bin`. Delete `.agentreceipt/` in your repo yourself if you don't want the receipts.
 
 MIT licensed.
