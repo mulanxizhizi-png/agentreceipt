@@ -34,4 +34,18 @@ function diffSummary(root) {
   return { isRepo: true, files, insertions, deletions, testFilesChanged };
 }
 
-module.exports = { diffSummary, TEST_FILE };
+// Committed changes between two refs (used in CI: PR base vs head).
+function diffBetween(root, base, head = 'HEAD') {
+  let numstat;
+  try { numstat = git(root, ['diff', '--numstat', base, head]); } catch { return null; }
+  const files = []; let insertions = 0, deletions = 0;
+  for (const line of numstat.split('\n').filter(Boolean)) {
+    const [a, d, f] = line.split('\t');
+    if (f.startsWith('.agentreceipt/')) continue;
+    insertions += Number(a) || 0; deletions += Number(d) || 0;
+    files.push({ path: f, status: 'modified' });
+  }
+  return { isRepo: true, files, insertions, deletions, testFilesChanged: files.map((f) => f.path).filter((p) => TEST_FILE.test(p)) };
+}
+
+module.exports = { diffSummary, diffBetween, git, TEST_FILE };

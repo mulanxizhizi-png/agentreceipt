@@ -84,6 +84,35 @@ Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hi
 
 `testFilesChanged` flags agents that edit the tests instead of the code. The block message warns them too.
 
+## GitHub Action (free)
+
+Runs your tests on every pull request, writes a receipt in the same JSON format (`agent: "ci"`, with the PR title and body as the claim), and posts a single PR comment that is updated on every push. The check fails when tests fail.
+
+```yaml
+# .github/workflows/agentreceipt.yml
+name: agentreceipt
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write   # for the receipt comment
+jobs:
+  receipt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 2 }   # lets the receipt show the PR diff
+      - uses: actions/setup-node@v4   # plus whatever your tests need
+        with: { node-version: 20 }
+      - uses: mulanxizhizi-png/agentreceipt@main
+        # with:
+        #   test-command: npm test   # default: .agentreceipt/config.json, else auto-detect
+        #   timeout: 600             # seconds
+        #   comment: true            # post/update the PR comment
+        #   github-token: ${{ github.token }}
+```
+
+Outputs: `status` (`green`/`red`) and `receipt-path`. The receipt is also added to the job summary. No dependencies; it uses the runner's Node.
+
 ## Uninstall
 
 ```

@@ -1,0 +1,41 @@
+name: agentreceipt
+description: Run your tests on every PR and post a receipt comment. Fails the check when tests fail.
+author: Zjing (mulanxizhizi-png)
+branding:
+  icon: check-square
+  color: green
+inputs:
+  test-command:
+    description: Test command. Default is .agentreceipt/config.json testCommand, or auto-detected (npm test, pytest, cargo test, go test, make test).
+    required: false
+    default: ''
+  timeout:
+    description: Test timeout in seconds.
+    required: false
+    default: '600'
+  comment:
+    description: Post or update a single receipt comment on the PR.
+    required: false
+    default: 'true'
+  github-token:
+    description: Token used to post the PR comment (needs pull-requests write).
+    required: false
+    default: ${{ github.token }}
+outputs:
+  status:
+    description: green or red
+    value: ${{ steps.receipt.outputs.status }}
+  receipt-path:
+    description: Path to the JSON receipt
+    value: ${{ steps.receipt.outputs.receipt-path }}
+runs:
+  using: composite
+  steps:
+    - id: receipt
+      shell: bash
+      run: node "$GITHUB_ACTION_PATH/src/action.js"
+      env:
+        AR_TEST_COMMAND: ${{ inputs.test-command }}
+        AR_TIMEOUT: ${{ inputs.timeout }}
+        AR_COMMENT: ${{ inputs.comment }}
+        AR_TOKEN: ${{ inputs.github-token }}

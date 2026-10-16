@@ -33,7 +33,7 @@ function writeReceipt(root, receipt) {
 
 function formatReceipt(r, { color = false } = {}) {
   const c = (code, s) => (color ? `\x1b[${code}m${s}\x1b[0m` : s);
-  const badge = { green: c('32;1', 'PASS  verified'), blocked: c('33;1', 'BLOCKED  agent sent back to work'), red: c('31;1', 'RED  stopped with failing tests') }[r.status];
+  const badge = { green: c('32;1', 'PASS  verified'), blocked: c('33;1', 'BLOCKED  agent sent back to work'), red: c('31;1', r.agent === 'ci' ? 'RED  tests failing' : 'RED  stopped with failing tests') }[r.status];
   const line = '-'.repeat(44);
   const out = [line, ' AGENT RECEIPT', line,
     ` Status:   ${badge}`,
@@ -42,8 +42,8 @@ function formatReceipt(r, { color = false } = {}) {
     ` Tests:    ${r.tests.command} -> ${r.tests.timedOut ? 'TIMED OUT' : r.tests.passed ? 'passed' : `failed (exit ${r.tests.exitCode})`} in ${(r.tests.durationMs / 1000).toFixed(1)}s`,
     ` Diff:     ${r.diff.isRepo ? `${r.diff.filesChanged} files, +${r.diff.insertions} -${r.diff.deletions}` : 'not a git repo'}`];
   if (r.diff.testFilesChanged.length) out.push(c('33', ` Warning:  test files changed: ${r.diff.testFilesChanged.join(', ')}`));
-  out.push(` Blocks:   ${r.blocks.count}/${r.blocks.max}`);
-  if (r.status === 'red') out.push(c('31', ' Block limit reached: stop allowed, tests still failing.'));
+  if (r.agent !== 'ci') out.push(` Blocks:   ${r.blocks.count}/${r.blocks.max}`);
+  if (r.status === 'red' && r.agent !== 'ci') out.push(c('31', ' Block limit reached: stop allowed, tests still failing.'));
   out.push(line);
   return out.join('\n');
 }
