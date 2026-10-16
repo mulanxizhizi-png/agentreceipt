@@ -1,0 +1,1 @@
+receipt	pass	11s	https://github.com/mulanxizhizi-png/agentreceipt-action-test/actions/runs/38865115017/job/116856015785	

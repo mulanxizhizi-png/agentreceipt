@@ -1,0 +1,2 @@
+completed	success	Refactor add (agent says: all tests pass)	agentreceipt	broken	pull_request	38865115017	15s	2026-10-16T07:06:22Z
+completed	failure	Refactor add (agent says: all tests pass)	agentreceipt	broken	pull_request	38864979630	16s	2026-10-16T07:05:07Z

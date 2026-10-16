@@ -1,0 +1,1 @@
+receipt	fail	12s	https://github.com/mulanxizhizi-png/agentreceipt-action-test/actions/runs/38864979630/job/116855594117	

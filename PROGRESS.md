@@ -26,4 +26,7 @@
   - 按要求改了安装位置：Claude Code 的 hook 现在写到 .claude/settings.local.json（只在本机，不提交），并加到 .git/info/exclude 让 git 忽略，不改用户仓库里的文件；uninstall 也会清掉旧版本写进 .claude/settings.json 的条目。另外去掉了会留在项目里的 .bak 备份文件。
   - 还没测：Anthropic 官方订阅。
 - npm 发布准备好了（**还没发布**）：package.json 补齐了 files 白名单（只打包 bin/、src/、README、LICENSE，不含 e2e、测试、spike）、engines（node>=16，实测 Node 16 和 20 都能跑）、MIT 许可（版权人 Zjing / mulanxizhizi-png）、主页、仓库、问题反馈地址、关键词和描述。npm pack 出来 13 个文件，压缩后 11.7 kB。在干净目录里装 tarball 跑了一遍 init → hook 拦截 → last → uninstall，全部正常；npx github: 安装也确认还能用。README 里的图片改成绝对链接，npm 页面上也能显示。
+- git 状态更干净：init 把 receipts/、state/、.claude/settings.local.json 写进 .git/info/exclude 里一个带标记的区块（# >>> agentreceipt … # <<< agentreceipt），uninstall 只删这个区块，用户自己写的同样内容不受影响。.agentreceipt/config.json 可以提交给团队共用（README 已说明）。
+- **免费 GitHub Action 做好了**（仓库根目录 action.yml，零依赖）：每个 PR 跑一遍测试，生成同一格式的收据（agent: ci，用 PR 标题和描述当「声称」），在 PR 下发一条评论并在每次推送后原地更新，测试没过就让检查失败。真实测试：在临时私有仓库 mulanxizhizi-png/agentreceipt-action-test 开了一个改坏代码的 PR → 检查失败，评论显示 RED；推送修复 → 检查通过，同一条评论更新为 PASS（始终只有 1 条评论）。证据在 e2e/action/。
+  - 临时仓库**还没删**：gh 登录缺少 delete_repo 权限，需要 Zjing 手动删，或者授权 delete_repo 后由我来删。
 - 待办：init 交互体验打磨；Zjing 网络方便时 npm publish。

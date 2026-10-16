@@ -42,7 +42,7 @@ function markdown(r, { runUrl } = {}) {
     '```',
     formatReceipt(r),
     '```',
-    r.status !== 'green' && tail ? `<details><summary>Last test output</summary>\n\n\`\`\`\n${tail.replace(/```/g, "'''")}\n\`\`\`\n</details>` : '',
+    r.status !== 'green' && tail ? `<details><summary>Last test output</summary>\n\n\`\`\`\n${tail.replace(/```/g, "'''")}\n\`\`\`\n</details>` : null,
     '',
     `<sub>agentreceipt · schema v${r.schemaVersion} · ${r.createdAt}${runUrl ? ` · [run](${runUrl})` : ''}</sub>`,
   ].filter((l) => l !== null).join('\n');
