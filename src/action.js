@@ -39,6 +39,7 @@ function markdown(r, { runUrl } = {}) {
   return [MARKER,
     `### ${icon} Agent Receipt: ${title}`,
     '',
+    r.verificationCriteria && r.verificationCriteria.changed ? `> [!NOTE]\n> **${r.verificationCriteria.notice}** / ${r.verificationCriteria.noticeZh}: ${r.verificationCriteria.reasons.map((x) => x.files ? `${x.kind} (${x.files.map((f) => `\`${f}\``).join(', ')})` : x.kind).join('; ')}\n` : null,
     '```',
     formatReceipt(r),
     '```',
@@ -88,7 +89,7 @@ async function main(env = process.env) {
   const claim = pr ? [pr.title, (pr.body || '').split('\n')[0]].filter(Boolean).join(' | ') : null;
   const receipt = buildReceipt({
     agent: 'ci', sessionId: env.GITHUB_RUN_ID || null, turnId: pr ? `pr-${pr.number}@${(pr.head && pr.head.sha || '').slice(0, 7)}` : null,
-    claim, testCommand, test, diff, blockCount: 0, maxBlocks: 0, decision: passed ? 'allow' : 'fail',
+    claim, testCommand, test, diff, config: { fingerprint: 'sha256:' + require('crypto').createHash('sha256').update(String(testCommand)).digest('hex'), changedSinceLastVerified: false }, blockCount: 0, maxBlocks: 0, decision: passed ? 'allow' : 'fail',
   });
   const file = writeReceipt(root, receipt);
   console.log(formatReceipt(receipt));

@@ -17,6 +17,7 @@ function blockReason(r) {
   const parts = [drift && r.tests.passed
     ? `agentreceipt: \`${r.tests.command}\` passed, but the code changed while the tests were running, so the result can't be trusted. Make sure nothing is still editing files, then re-run the tests.`
     : `agentreceipt: you tried to finish, but \`${r.tests.command}\` ${r.tests.timedOut ? 'timed out' : `failed (exit ${r.tests.exitCode})`}.`];
+  if (r.verificationCriteria && r.verificationCriteria.changed) parts.push(`Notice: ${r.verificationCriteria.notice} (${r.verificationCriteria.noticeZh}). The user will review this change.`);
   for (const w of r.warnings || []) parts.push(`Warning: ${w}`);
   if (r.diff.testFilesChanged.length) parts.push(`Note: test files were modified (${r.diff.testFilesChanged.join(', ')}); fix the code, not the tests.`);
   if (r.tests.outputHead) parts.push(`Start of test output:\n${r.tests.outputHead.trim().split('\n').slice(0, 25).join('\n')}`);
@@ -86,7 +87,7 @@ async function handleStop(input, { agent = 'codex' } = {}) {
         testCommand: cfg.testCommand, test, diff, blockCount, maxBlocks: cfg.maxBlocks,
         decision: canBlock ? 'block' : 'allow',
         git: { head, base, commitsSinceBase }, fingerprint,
-        config: { fingerprint: cfgFp, changedSinceLastVerified: configChanged },
+        config: { fingerprint: cfgFp, changedSinceLastVerified: configChanged, ...(configChanged && last.testCommand && last.testCommand !== cfg.testCommand ? { previousTestCommand: last.testCommand } : {}) },
         warnings,
       });
       const file = writeReceipt(root, receipt);

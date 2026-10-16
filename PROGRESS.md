@@ -51,3 +51,7 @@
 - 根因：测试命令打印大量输出后立刻 `process.exit()`，Node 子进程写到非阻塞管道里还没写出去的数据会被直接丢掉；父进程读得慢时（CI 繁忙）就丢尾部。这是真实产品问题：receipt 会丢测试日志尾部。
 - 修复：子进程 stdout/stderr 直接写入日志文件（同步写，不丢数据），结束后从文件读取 head + tail。新增回归测试（旧代码 5/5 失败，新代码 0 失败）。
 - 验证：Node 20 全量 40 次 0 失败，Node 22 全量 40 次 0 失败，#22 单测 100 次 0 失败。
+
+## 2026-10-16 验证标准变化提示
+- 测试文件、检查命令/配置（.agentreceipt/config.json、CI workflow、package.json、jest/vitest/pytest 配置等）变化时，receipt 新增 `verificationCriteria` 字段（changed、reasons、configFingerprint），并在人类可读回执、agent 反馈、PR 评论中以中性提示显示「验证标准已变化，需复核 / Verification criteria changed, review needed」。
+- 只做提示，不改变 status（场景 08 仍不阻断）。新增 3 个测试，共 55 个；Node 20 / Node 22 并行各跑 40 次，0 失败。

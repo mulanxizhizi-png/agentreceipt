@@ -131,3 +131,41 @@ test('output printed right before process.exit() is never lost (regression #22)'
     assert.match(r.outputTail, /noise line 19999/); assert.match(r.outputHead, /^noise line 0\n/);
   }
 });
+
+test('verification criteria change: neutral notice, config fingerprint, status unchanged', async () => {
+  const { buildReceipt, formatReceipt, NOTICE_ZH, NOTICE_EN } = require('../src/receipt');
+  const test0 = { exitCode: 0, timedOut: false, durationMs: 1, outputTail: '' };
+  const base = { agent: 'codex', testCommand: 'npm test', test: test0, blockCount: 0, maxBlocks: 3, decision: 'allow' };
+  const clean = buildReceipt({ ...base, diff: { isRepo: true, files: [{ path: 'src/a.js' }], insertions: 1, deletions: 0, testFilesChanged: [] }, config: { fingerprint: 'sha256:x', changedSinceLastVerified: false } });
+  assert.equal(clean.verificationCriteria.changed, false); assert.equal(clean.verificationCriteria.configFingerprint, 'sha256:x');
+  assert.doesNotMatch(formatReceipt(clean), /Notice/);
+  const t = buildReceipt({ ...base, diff: { isRepo: true, files: [{ path: 'test/a.test.js' }], insertions: 1, deletions: 0, testFilesChanged: ['test/a.test.js'] }, config: { fingerprint: 'sha256:x', changedSinceLastVerified: false } });
+  assert.equal(t.status, 'green', 'notice is informational only');
+  assert.equal(t.verificationCriteria.changed, true); assert.equal(t.verificationCriteria.noticeZh, NOTICE_ZH);
+  assert.ok(formatReceipt(t).includes(NOTICE_EN) && formatReceipt(t).includes(NOTICE_ZH));
+  const c = buildReceipt({ ...base, diff: { isRepo: true, files: [], insertions: 0, deletions: 0, testFilesChanged: [] }, config: { fingerprint: 'sha256:y', changedSinceLastVerified: true, previousTestCommand: 'node -e 1' } });
+  assert.deepEqual(c.verificationCriteria.reasons.map((r) => r.kind), ['config']);
+  const w = buildReceipt({ ...base, diff: { isRepo: true, files: [{ path: '.github/workflows/ci.yml' }], insertions: 1, deletions: 0, testFilesChanged: [] } });
+  assert.equal(w.verificationCriteria.reasons[0].kind, 'check-config-files');
+});
+
+test('verification criteria notice reaches the agent feedback when the config changed', async () => {
+  const d = tmpRepo({ 'src.js': 'x\n' });
+  saveConfig(d, { testCommand: 'node -e 0' });
+  let r = await handleStop({ cwd: d, session_id: 'vc' });
+  assert.equal(r.receipt.verificationCriteria.changed, false); assert.match(r.receipt.verificationCriteria.configFingerprint, /^sha256:/);
+  saveConfig(d, { testCommand: 'node -e "process.exit(1)"', maxBlocks: 2 });
+  r = await handleStop({ cwd: d, session_id: 'vc2' });
+  assert.equal(r.receipt.verificationCriteria.changed, true);
+  assert.equal(r.receipt.verificationCriteria.reasons[0].previousTestCommand, 'node -e 0');
+  assert.match(r.output.reason, /Verification criteria changed, review needed/); assert.match(r.output.reason, /验证标准已变化，需复核/);
+});
+
+test('PR comment shows the verification criteria notice', () => {
+  const { markdown } = require('../src/action');
+  const { buildReceipt } = require('../src/receipt');
+  const rc = buildReceipt({ agent: 'ci', testCommand: 'npm test', test: { exitCode: 0, timedOut: false, durationMs: 1, outputTail: '' }, blockCount: 0, maxBlocks: 0, decision: 'allow',
+    diff: { isRepo: true, files: [{ path: 'test/x.test.js' }], insertions: 1, deletions: 0, testFilesChanged: ['test/x.test.js'] }, config: { fingerprint: 'sha256:z' } });
+  const md = markdown(rc);
+  assert.match(md, /> \[!NOTE\]/); assert.match(md, /验证标准已变化，需复核/); assert.match(md, /✅/);
+});
