@@ -2,3 +2,4 @@ node_modules/
 spike/
 e2e/*.log
 *.tgz
+.agentreceipt/
