@@ -2,6 +2,8 @@
 
 **Your coding agent says "done". Make it show a receipt.**
 
+Website: https://agentreceipt.pages.dev
+
 agentreceipt adds a Stop hook to your coding agent. When the agent tries to finish, the hook runs your tests and checks the git diff. If the tests fail, the agent is sent back to work with the failure output. After a set number of blocks it's allowed to stop, and the receipt is marked **RED**.
 
 ![red receipt](https://raw.githubusercontent.com/mulanxizhizi-png/agentreceipt/main/e2e/red-receipt.png)
@@ -13,7 +15,7 @@ agentreceipt adds a Stop hook to your coding agent. When the agent tries to fini
 In your project (git repo):
 
 ```
-npx github:mulanxizhizi-png/agentreceipt#v0.1.4 init
+npx github:mulanxizhizi-png/agentreceipt#v0.1.5 init
 ```
 
 `init` never overwrites a settings file it can't parse: it stops with an error and changes nothing. Before modifying an existing file, it saves a copy to `~/.agentreceipt/backups/`.
@@ -194,7 +196,7 @@ Outputs: `status` (`green`, `red`, or `error` when agentreceipt couldn't verify,
 ## Uninstall
 
 ```
-npx github:mulanxizhizi-png/agentreceipt#v0.1.4 uninstall
+npx github:mulanxizhizi-png/agentreceipt#v0.1.5 uninstall
 ```
 
 By default this only affects the **current project**: it removes the hook from `.claude/settings.local.json` (and any legacy entry in `.claude/settings.json`) and the agentreceipt block in `.git/info/exclude`.
