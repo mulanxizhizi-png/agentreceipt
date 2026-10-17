@@ -6,7 +6,8 @@ const { loadEffectiveConfig } = require('./config');
 const { detectTestCommand } = require('./detect');
 const { runTests } = require('./run');
 const { diffBetween, git } = require('./git');
-const { buildReceipt, writeReceipt, formatReceipt } = require('./receipt');
+const { buildReceipt, writeReceipt, formatReceipt, noChangesIn, noChangesText, partialText } = require('./receipt');
+const { testScope } = require('./scope');
 
 const MARKER = '<!-- agentreceipt:ci -->';
 
@@ -33,12 +34,14 @@ function prDiff(root, event) {
 
 function markdown(r, { runUrl } = {}) {
   const icon = r.status === 'green' ? '✅' : r.status === 'error' ? '⚠️' : '🟥';
-  const title = r.status === 'green' ? 'PASS: tests verified' : r.status === 'error' ? 'ERROR: could not verify' : 'RED: tests failing';
+  const title = r.status === 'green' ? 'PASS: tests verified' : r.status === 'error' ? 'ERROR: could not verify' : r.tests.passed && r.changeCheck && !r.changeCheck.satisfied ? 'RED: no files changed' : 'RED: tests failing';
   const tail = r.tests.outputTail.trim().split('\n').slice(-30).join('\n');
   return [MARKER,
     `### ${icon} Agent Receipt: ${title}`,
     '',
     r.verificationCriteria && r.verificationCriteria.changed ? `> [!NOTE]\n> **${r.verificationCriteria.notice}** / ${r.verificationCriteria.noticeZh}: ${r.verificationCriteria.reasons.map((x) => x.files ? `${x.kind} (${x.files.map((f) => `\`${f}\``).join(', ')})` : x.kind).join('; ')}\n` : null,
+    r.diff.noChanges ? `> [!WARNING]\n> **${noChangesText(r)}**${r.changeCheck ? '. The check fails until the PR changes a file.' : '. Tests passing on unchanged code don\'t show the work was done.'}\n` : null,
+    r.tests.partial ? `> [!WARNING]\n> **${partialText(r)}**\n` : null,
     r.error ? `> [!WARNING]\n> agentreceipt error: ${String(r.error).replace(/\n/g, ' ')}\n` : null,
     '```',
     formatReceipt(r),
@@ -111,11 +114,17 @@ async function main(env = process.env) {
 
   const test = await runTests(testCommand, root, Number(env.AR_TIMEOUT) || 600);
   const diff = prDiff(root, event);
-  const passed = test.exitCode === 0 && !test.timedOut;
+  const testsPassed = test.exitCode === 0 && !test.timedOut;
+  // requireChanges (shared config): a PR whose diff (after ignore globs) is empty fails the check.
+  const changesMissing = !!(cfg && cfg.requireChanges) && noChangesIn(diff);
+  const passed = testsPassed && !changesMissing;
+  let scope = null; try { scope = testScope(root, testCommand); } catch {}
   const receipt = buildReceipt({
+    requireChanges: !!(cfg && cfg.requireChanges), scope,
     ...meta, testCommand, test, diff, criteriaFiles: cfg && cfg.criteriaFiles, config: { fingerprint: 'sha256:' + require('crypto').createHash('sha256').update(String(testCommand)).digest('hex'), changedSinceLastVerified: false }, blockCount: 0, maxBlocks: 0, decision: passed ? 'allow' : 'fail',
   });
   await publish(receipt);
+  if (testsPassed && changesMissing) { console.log('::error::agentreceipt: the PR changes no files and .agentreceipt/config.json has requireChanges: true'); process.exitCode = 1; return; }
   if (!passed) { console.log(`::error::agentreceipt: \`${testCommand}\` ${test.timedOut ? 'timed out' : `failed (exit ${test.exitCode})`}`); process.exitCode = 1; }
 }
 

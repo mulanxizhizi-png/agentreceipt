@@ -35,6 +35,7 @@ function validateConfig(cfg) {
   if (cfg.criteriaFiles !== undefined && !(Array.isArray(cfg.criteriaFiles) && cfg.criteriaFiles.every((g) => typeof g === 'string' && g.trim()))) errs.push('criteriaFiles must be an array of glob strings');
   if (cfg.ignore !== undefined && !(Array.isArray(cfg.ignore) && cfg.ignore.every((g) => typeof g === 'string' && g.trim()))) errs.push('ignore must be an array of glob strings');
   if (cfg.cleanEnv !== undefined && typeof cfg.cleanEnv !== 'boolean') errs.push('cleanEnv must be true or false');
+  if (cfg.requireChanges !== undefined && typeof cfg.requireChanges !== 'boolean') errs.push(`requireChanges must be true or false (got ${JSON.stringify(cfg.requireChanges)})`);
   return errs;
 }
 

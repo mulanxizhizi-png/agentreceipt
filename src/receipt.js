@@ -36,10 +36,18 @@ function criteriaChange(diff, config, criteriaFiles = []) {
   return { changed: reasons.length > 0, ...(reasons.length ? { notice: NOTICE_EN, noticeZh: NOTICE_ZH } : {}), reasons, configFingerprint: (config && config.fingerprint) || null };
 }
 
-function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff, blockCount, maxBlocks, decision, error, git, fingerprint, config, warnings, criteriaFiles, environment }) {
+// noChanges: the diff is known (a git repo, PR diff available) and has zero files after ignore globs.
+function noChangesIn(diff) { return !!(diff && diff.isRepo && !diff.unavailable && diff.files.length === 0); }
+
+// requireChanges (config): a stop with no changed files is not verified (blocked, or red at the limit).
+// scope: result of testScope() (src/scope.js); only a positive "partial" is recorded.
+function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff, blockCount, maxBlocks, decision, error, git, fingerprint, config, warnings, criteriaFiles, environment, requireChanges = false, scope = null }) {
   const passed = test.exitCode === 0 && !test.timedOut;
-  const verified = passed && !(fingerprint && fingerprint.changedDuringTests);
+  const noChanges = noChangesIn(diff);
+  const changesMissing = !!requireChanges && noChanges;
+  const verified = passed && !(fingerprint && fingerprint.changedDuringTests) && !changesMissing;
   const status = error ? 'error' : verified ? 'green' : decision === 'block' ? 'blocked' : 'red';
+  const partial = scope && scope.partial ? { partial: true, detectedCommand: scope.detectedCommand, ...(scope.reason ? { partialReason: scope.reason } : {}) } : {};
   return {
     schemaVersion: SCHEMA_VERSION,
     tool: 'agentreceipt',
@@ -47,7 +55,7 @@ function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff
     agent, sessionId: sessionId || null, turnId: turnId || null,
     status, decision,
     claim: claim ? String(claim).slice(0, 2000) : null,
-    tests: { command: testCommand, passed, exitCode: test.exitCode, timedOut: test.timedOut, ...(test.spawnError ? { spawnError: test.spawnError } : {}), durationMs: test.durationMs,
+    tests: { command: testCommand, passed, exitCode: test.exitCode, timedOut: test.timedOut, ...partial, ...(test.spawnError ? { spawnError: test.spawnError } : {}), durationMs: test.durationMs,
       outputBytes: test.outputBytes ?? null, logPath: test.logPath || null,
       ...(test.outputHead && test.outputBytes > (test.outputHead.length + (test.outputTail || '').length) ? { outputHead: test.outputHead } : {}),
       outputTail: test.outputTail },
@@ -57,10 +65,18 @@ function buildReceipt({ agent, sessionId, turnId, claim, testCommand, test, diff
     ...(environment ? { environment } : {}),
     warnings: warnings || [],
     verificationCriteria: criteriaChange(diff, config, Array.isArray(criteriaFiles) ? criteriaFiles : []),
-    diff: { isRepo: diff.isRepo, base: diff.base || null, filesChanged: diff.files.length, insertions: diff.insertions, deletions: diff.deletions, files: diff.files, testFilesChanged: diff.testFilesChanged },
+    ...(requireChanges ? { changeCheck: { required: true, noChanges, satisfied: !changesMissing } } : {}),
+    diff: { isRepo: diff.isRepo, base: diff.base || null, filesChanged: diff.files.length, ...(noChanges ? { noChanges: true } : {}), insertions: diff.insertions, deletions: diff.deletions, files: diff.files, testFilesChanged: diff.testFilesChanged },
     blocks: { count: blockCount, max: maxBlocks },
     ...(error ? { error: String(error) } : {}),
   };
+}
+
+function noChangesText(r) {
+  return `NO FILES WERE CHANGED ${r.agent === 'ci' ? 'in this PR' : 'in this turn'}${r.changeCheck ? ' (requireChanges is on)' : ''}`;
+}
+function partialText(r) {
+  return `only part of the test suite ran (configured \`${r.tests.command}\`, detected full suite \`${r.tests.detectedCommand}\`)`;
 }
 
 function receiptName(receipt) { return `${receipt.createdAt.replace(/[:.]/g, '-')}-${receipt.status}.json`; }
@@ -84,6 +100,8 @@ function formatReceipt(r, { color = false } = {}) {
     ` Claimed:  ${r.claim ? r.claim.split('\n')[0].slice(0, 70) : '(no message)'}`,
     ` Tests:    ${!r.tests.command ? '(not run)' : r.tests.spawnError ? `${r.tests.command} -> could not run` : `${r.tests.command} -> ${r.tests.timedOut ? 'TIMED OUT' : r.tests.passed ? 'passed' : `failed (exit ${r.tests.exitCode})`} in ${(r.tests.durationMs / 1000).toFixed(1)}s`}`,
     ` Diff:     ${r.diff.isRepo ? `${r.diff.filesChanged} files, +${r.diff.insertions} -${r.diff.deletions}` : 'not a git repo'}`];
+  if (r.diff.noChanges) out.push(c('33;1', ` Changes:  ${noChangesText(r)}`));
+  if (r.tests.partial) out.push(c('33;1', ` Scope:    ${partialText(r)}`));
   if (r.git && r.git.head) out.push(` Commit:   ${r.git.head.slice(0, 12)}${r.git.commitsSinceBase ? ` (+${r.git.commitsSinceBase} commit${r.git.commitsSinceBase > 1 ? 's' : ''} since last stop)` : ''}`);
   const vc = r.verificationCriteria;
   if (vc && vc.changed) out.push(c('36;1', ` Notice:   ${vc.notice} / ${vc.noticeZh}`) + ` (${vc.reasons.map((x) => x.kind).join(', ')})`);
@@ -99,9 +117,11 @@ function formatReceipt(r, { color = false } = {}) {
   if (r.diff.testFilesChanged.length) out.push(c('33', ` Warning:  test files changed: ${r.diff.testFilesChanged.join(', ')}`));
   if (r.agent !== 'ci') out.push(` Blocks:   ${r.blocks.count}/${r.blocks.max}`);
   if (r.error) out.push(c('35', ` Error:    ${r.error.split('\n')[0].slice(0, 200)}`));
-  if (r.status === 'red' && r.agent !== 'ci') out.push(c('31', ' Block limit reached: stop allowed, tests still failing.'));
+  const changesMissing = !!(r.changeCheck && !r.changeCheck.satisfied);
+  if (r.status === 'red' && r.agent !== 'ci') out.push(c('31', r.tests.passed && changesMissing ? ' Stopped without changing any files (requireChanges is on).' : ' Block limit reached: stop allowed, tests still failing.'));
+  if (r.status === 'red' && r.agent === 'ci' && r.tests.passed && changesMissing) out.push(c('31', ' Check failed: the PR changes no files (requireChanges is on).'));
   out.push(line);
   return out.join('\n');
 }
 
-module.exports = { globRe, isCriteriaFile, receiptName, NOTICE_EN, NOTICE_ZH, criteriaChange, SCHEMA_VERSION, buildReceipt, writeReceipt, formatReceipt };
+module.exports = { noChangesIn, noChangesText, partialText, globRe, isCriteriaFile, receiptName, NOTICE_EN, NOTICE_ZH, criteriaChange, SCHEMA_VERSION, buildReceipt, writeReceipt, formatReceipt };

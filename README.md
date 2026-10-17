@@ -46,18 +46,63 @@ First run in the interactive TUI: there's no separate hook approval. Hooks in `.
 - `stop_hook_active` is used to avoid infinite loops. Continuations count toward `maxBlocks`, and a fresh turn (`stop_hook_active: false`) resets the count. Claude Code's own 8-continuation cap is a second backstop.
 - To install for only one agent: `--agent codex` or `--agent claude`.
 
+## How it works
+
+agentreceipt is a **Stop hook**. When the agent tries to end its turn, Codex or Claude Code runs `~/.agentreceipt/bin/agentreceipt-hook` with the stop event as JSON on stdin. The hook:
+
+1. finds the repo and loads `.agentreceipt/config.json` (no config: does nothing);
+2. hashes the code on disk, runs `testCommand` with `timeoutSec`, and hashes the code again;
+3. reads the git diff since the last allowed stop (minus generated/ignored files);
+4. writes a receipt and answers the agent on stdout:
+   - tests fail (or `requireChanges` and nothing changed): exit 0 with `{"decision":"block","reason":"..."}`. The agent is not allowed to stop; the `reason` (what failed, test output head/tail, notes) becomes its next instruction.
+   - otherwise: exit 0 with `{"systemMessage":"<receipt>"}`, so you see the receipt and the agent stops.
+
+Both agents also accept the older form, exit code 2 with the reason on stderr, with the same effect. We use the JSON decision because:
+
+- **One format for both agents.** Codex and Claude Code read the same `decision`/`reason`/`systemMessage` fields, so the hook code is identical for both (the only difference is the `codex`/`claude` argument).
+- **stderr stays for you, not the agent.** The hook prints the human-readable receipt to stderr even when it blocks. That receipt can contain things meant only for you (e.g. the agentundo `Go back:` restore command). With exit code 2, stderr *is* the reason fed to the agent; with JSON, only the `reason` we wrote goes to the agent.
+- **Allowed stops still show the receipt** via `systemMessage`, which only exists in the JSON form.
+- **Crashes fail open.** A non-zero exit other than 2 is treated by both agents as a hook failure and the stop goes through. agentreceipt catches its own errors, allows the stop, and writes an `error` receipt, so a bug in agentreceipt never traps the agent and can't be mistaken for a block.
+
+Loops are bounded by `maxBlocks` per turn (`stop_hook_active: false` starts a new turn).
+
+### Test timeout
+
+- `--timeout` / `timeoutSec` defaults to **300 s**. A run that takes longer is killed and counts as a failure (the agent is sent back, never "done" on an unfinished run).
+- The agent kills the whole hook after **900 s** (the `timeout` `init` writes into the hook definition). The hook needs time for more than the tests: the git diff, two code fingerprints, the receipt and the optional agentundo snapshot. So keep `timeoutSec` at **780 s (13 min) or less** (900 s minus 120 s headroom). `init` warns above 780. If the hook itself is killed at 900 s there is no receipt.
+- For slow suites: run a fast subset locally (`--test "pytest tests/unit"`, or a smoke marker) and run the full suite on every PR with the [GitHub Action](#github-action-free). The receipt marks the subset as partial (below).
+
+### No changes (`requireChanges`)
+
+If the turn changed no files (after the ignore globs, counting commits since the last allowed stop), the receipt says **NO FILES WERE CHANGED in this turn** (`diff.noChanges: true`) in the receipt, the message you see, the block reason and the PR comment. By default that's all: answering a question, reviewing code or investigating a bug correctly changes nothing.
+
+Turn on `requireChanges` (`init --require-changes`) when every run is supposed to modify code, e.g. scripted or CI-like agent runs ("fix this issue", "implement this ticket"). Then:
+
+- a stop with no changed files is **blocked once per turn** (it counts toward `maxBlocks`), asking the agent to make the change or explain why none is needed;
+- if it stops again still without changes, the stop is allowed and the receipt is **red** ("Stopped without changing any files"), with the agent's explanation as the claim. `changeCheck` in the receipt records `{ required, noChanges, satisfied }`;
+- the GitHub Action reads the same config: a PR with no changed files fails the check.
+
+### Partial test runs
+
+If your `testCommand` runs only part of the suite that auto-detection would run, the receipt says **only part of the test suite ran (configured `pytest tests/unit`, detected full suite `pytest -q`)** and records `tests.partial: true` and `tests.detectedCommand`. Same in the hook message, the block reason and the PR comment. It's information, not a failure.
+
+It's marked only when we're sure: the configured command uses the same runner as the detected one (pytest, npm/pnpm/yarn/bun test or the `package.json` test script itself, cargo test, go test) and selects tests explicitly (a nested test directory, a test file or node id, `-k`/`-m`, `--lf`, `-t`/`--testNamePattern`, a cargo filter or `-p`, `go test -run` or a narrower package pattern). Flags that don't select tests (`-q`, `-x`, `--coverage`, `-race`) don't count. Wrapper scripts, a different runner, `&&` chains, or a repo where no full command is detected get no mark: a missing mark is better than a false one.
+
 ## Options
 
 ```
-agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope local|user] [--timeout 300] [--max-blocks 3]
+agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope local|user] [--timeout 300] [--max-blocks 3] [--require-changes]
 ```
+
+`--require-changes` sets `requireChanges: true` (`--no-require-changes` turns it off again); re-running `init` without either flag keeps the current value.
 
 `.agentreceipt/config.json`:
 
 | key | default | meaning |
 | --- | --- | --- |
 | `testCommand` | detected | shell command run from the repo root; exit 0 = pass |
-| `timeoutSec` | 300 | longer runs are killed and count as a failure. Number > 0 |
+| `timeoutSec` | 300 | longer runs are killed and count as a failure. Number > 0. Keep it at 780 or less, see [Test timeout](#test-timeout) |
+| `requireChanges` | false | a stop where the turn changed no files is sent back once. See [No changes](#no-changes-requirechanges) |
 | `maxBlocks` | 3 | times per turn the agent can be sent back before it's allowed to stop (RED). Integer ≥ 0; 0 = receipts only, never block |
 | `cleanEnv` | false | verify in a cleaner environment. Python: point `PYTHONPYCACHEPREFIX` at a fresh empty temp dir and set `PYTHONDONTWRITEBYTECODE=1`, so a stale `__pycache__/*.pyc` can't make broken source pass |
 | `criteriaFiles` | none | extra globs (`*`, `**`, `?`) for files that define your checks, e.g. `["ci/**/*.sh"]`. Changes to them add the "verification criteria changed" notice |
@@ -72,7 +117,7 @@ agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope lo
 
 Every check writes `.agentreceipt/receipts/<timestamp>-<status>.json` (not committed) and prints a readable receipt. `agentreceipt last` shows the latest one.
 
-Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hit, stopped with failing tests), `error` (agentreceipt itself couldn't verify, e.g. invalid config, a test command that can't start or isn't found (exit 127), or receipts that can't be written; the stop is allowed and a warning is shown).
+Status: `green` (tests pass), `blocked` (agent sent back), `red` (block limit hit, stopped with failing tests; or, with `requireChanges`, stopped without changing any files), `error` (agentreceipt itself couldn't verify, e.g. invalid config, a test command that can't start or isn't found (exit 127), or receipts that can't be written; the stop is allowed and a warning is shown).
 
 ```json
 {
@@ -144,7 +189,7 @@ jobs:
         #   github-token: ${{ github.token }}
 ```
 
-Outputs: `status` (`green`/`red`) and `receipt-path`. The receipt is also added to the job summary. No dependencies; it uses the runner's Node.
+Outputs: `status` (`green`, `red`, or `error` when agentreceipt couldn't verify, e.g. an invalid config; red and error fail the check) and `receipt-path`. The comment also shows the "no files were changed" and "only part of the test suite ran" notes, and with `requireChanges` a PR that changes no files fails the check. The receipt is also added to the job summary. No dependencies; it uses the runner's Node.
 
 ## Uninstall
 

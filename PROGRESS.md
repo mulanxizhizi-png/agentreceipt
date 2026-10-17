@@ -99,3 +99,9 @@
 - 问题 2（`--global` 之后 `--purge` 找不到保留了收据的项目）：原因是 `--global` 删 runtime 时把登记表 `projects.json` 整个删了。现在保留收据的项目会以 `receiptsOnly` 登记下来，`--purge` 会把它们一起列出并清理，清理完再从登记表移除。
 - 问题 3（真终端里看不到项目列表和确认提示）：和问题 1 是同一个原因。现在用真实伪终端测试：输入 n 时显示「Aborted; nothing changed.」，退出码 1，什么都不改；输入 y 时执行清理。
 - 新增 3 个回归测试，按部署的 A/B/C 步骤复现，其中一个用 python pty 跑真实终端；共 63 个，Node 20 连跑 20 次全绿。
+
+## 2026-10-17 v0.1.5：评论区用户提的三条改进
+- `requireChanges`（默认 false，`init --require-changes` / `--no-require-changes`）：这一轮一个文件都没改时（忽略规则之后，含上次放行后的 commit），拦一次（计入 maxBlocks），要求 agent 去改代码或说明为什么不用改；再次停下仍没改动就放行，收据记为 red（「Stopped without changing any files」），`changeCheck` 记录结果。GitHub Action 读同一份配置：PR 没有改动文件时检查失败。默认不拦，但收据、hook 消息、拦截原因、PR 评论都会醒目写出「NO FILES WERE CHANGED」（`diff.noChanges: true`）。
+- 部分测试标记（src/scope.js）：配置的测试命令和自动识别出的完整命令属于同一个运行器、并且明确选了一部分测试（子目录/文件/node id、-k/-m、--lf、-t、cargo 过滤/-p、go -run/更窄的包）时，收据记 `tests.partial: true` + `tests.detectedCommand`，回执、拦截原因、PR 评论显示「only part of the test suite ran (configured X, detected full suite Y)」。识别不了（包装脚本、不同运行器、&& 链、没识别出完整命令）就不标。
+- `init` 在 `--timeout` 超过 780 秒时警告（hook 900 秒会被 agent 杀掉）；配置的命令是部分测试时提示。
+- README：新增「How it works」（JSON block 决定 vs exit 2 + stderr）、测试超时上限、requireChanges、部分测试标记；Action 输出 status 补上 error。

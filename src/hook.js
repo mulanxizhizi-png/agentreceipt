@@ -5,10 +5,11 @@ const crypto = require('crypto');
 const { findRoot, loadEffectiveConfig, configFingerprint, DIR } = require('./config');
 const { runTests } = require('./run');
 const { diffSummary, codeFingerprint, headSha, isAncestor, git: gitCmd } = require('./git');
-const { buildReceipt, writeReceipt, formatReceipt, receiptName } = require('./receipt');
+const { buildReceipt, writeReceipt, formatReceipt, receiptName, noChangesText, partialText } = require('./receipt');
+const { testScope } = require('./scope');
 const { recordUndo } = require('./undo');
 const { prepareEnv } = require('./pyenv');
-const { getBlocks, setBlocks, withSessionLock, getLast, setLast } = require('./state');
+const { getTurn, getBlocks, setBlocks, withSessionLock, getLast, setLast } = require('./state');
 const { extractClaim } = require('./claim');
 
 const NOT_RUN = { exitCode: null, timedOut: false, durationMs: 0, outputTail: '' };
@@ -16,17 +17,29 @@ const EMPTY_DIFF = { isRepo: false, files: [], insertions: 0, deletions: 0, test
 
 function blockReason(r) {
   const drift = r.fingerprint && r.fingerprint.changedDuringTests;
-  const parts = [drift && r.tests.passed
-    ? `agentreceipt: \`${r.tests.command}\` passed, but the code changed while the tests were running, so the result can't be trusted. Make sure nothing is still editing files, then re-run the tests.`
-    : `agentreceipt: you tried to finish, but \`${r.tests.command}\` ${r.tests.timedOut ? 'timed out' : `failed (exit ${r.tests.exitCode})`}.`];
+  const changesMissing = !!(r.changeCheck && !r.changeCheck.satisfied);
+  const testsOk = r.tests.passed && !drift;
+  const parts = [];
+  if (testsOk && changesMissing) {
+    parts.push(`agentreceipt: you tried to finish, but no files were changed in this turn, and this project requires a change (requireChanges). \`${r.tests.command}\` passed, but passing tests on unchanged code don't show the task was done.`);
+    parts.push('If the task needs a code change, make it and re-run the tests. If no change is needed, explain why in your final message and finish; the receipt will record that no files were changed.');
+  } else {
+    parts.push(drift && r.tests.passed
+      ? `agentreceipt: \`${r.tests.command}\` passed, but the code changed while the tests were running, so the result can't be trusted. Make sure nothing is still editing files, then re-run the tests.`
+      : `agentreceipt: you tried to finish, but \`${r.tests.command}\` ${r.tests.timedOut ? 'timed out' : `failed (exit ${r.tests.exitCode})`}.`);
+    if (r.diff.noChanges) parts.push(`Note: ${noChangesText(r).toLowerCase()}.`);
+  }
+  if (r.tests.partial) parts.push(`Note: ${partialText(r)}.`);
   if (r.verificationCriteria && r.verificationCriteria.changed) parts.push(`Notice: ${r.verificationCriteria.notice} (${r.verificationCriteria.noticeZh}). The user will review this change.`);
   for (const w of r.warnings || []) parts.push(`Warning: ${w}`);
   if (r.diff.testFilesChanged.length) parts.push(`Note: test files were modified (${r.diff.testFilesChanged.join(', ')}); fix the code, not the tests.`);
-  if (r.tests.outputHead) parts.push(`Start of test output:\n${r.tests.outputHead.trim().split('\n').slice(0, 25).join('\n')}`);
-  const tail = r.tests.outputTail.trim().split('\n').slice(-25).join('\n');
-  if (tail) parts.push(`${r.tests.outputHead ? 'End' : 'Last'} of test output:\n${tail}`);
-  if (r.tests.logPath) parts.push(`Full log: ${r.tests.logPath}`);
-  parts.push(`Fix the failures and re-run the tests before finishing. (block ${r.blocks.count}/${r.blocks.max})`);
+  if (!testsOk) {
+    if (r.tests.outputHead) parts.push(`Start of test output:\n${r.tests.outputHead.trim().split('\n').slice(0, 25).join('\n')}`);
+    const tail = r.tests.outputTail.trim().split('\n').slice(-25).join('\n');
+    if (tail) parts.push(`${r.tests.outputHead ? 'End' : 'Last'} of test output:\n${tail}`);
+    if (r.tests.logPath) parts.push(`Full log: ${r.tests.logPath}`);
+    parts.push(`Fix the failures and re-run the tests before finishing. (block ${r.blocks.count}/${r.blocks.max})`);
+  } else parts.push(`(block ${r.blocks.count}/${r.blocks.max})`);
   return parts.join('\n\n');
 }
 
@@ -45,6 +58,8 @@ function errorResult({ root, agent, input, error, testCommand = null, test = NOT
   const warning = `agentreceipt ERROR: could not verify this stop, so it was allowed. ${msg}${file ? `\nReceipt: ${file}` : '\n(no receipt could be written)'}`;
   return { output: { systemMessage: text ? `${text}\n${warning}` : warning }, receipt, file, text, warning, error: msg };
 }
+
+function safeScope(root, command) { try { return testScope(root, command); } catch { return null; } }
 
 // Core decision. input = Stop hook JSON from stdin. Returns { output, receipt, file, text }; output is the JSON to print.
 async function handleStop(input, { agent = 'codex' } = {}) {
@@ -84,7 +99,12 @@ async function handleStop(input, { agent = 'codex' } = {}) {
       const diff = diffSummary(root, base);
       const fingerprint = { before: fpBefore, after: fpAfter, changedDuringTests: !!(fpBefore && fpAfter && fpBefore !== fpAfter) };
       const passed = test.exitCode === 0 && !test.timedOut && !fingerprint.changedDuringTests;
-      const canBlock = !passed && prior < cfg.maxBlocks;
+      // requireChanges: a turn that changed no files is sent back ONCE (counts toward maxBlocks); if the agent
+      // then stops again without changes (e.g. it explained why none is needed), the stop is allowed as red.
+      const turn = input.stop_hook_active === false ? {} : getTurn(root, sessionId);
+      const changesMissing = !!cfg.requireChanges && diff.isRepo && diff.files.length === 0;
+      const askChanges = changesMissing && !turn.askedForChanges;
+      const canBlock = (!passed || askChanges) && prior < cfg.maxBlocks;
       const blockCount = canBlock ? prior + 1 : prior;
       const receipt = buildReceipt({
         agent, sessionId, turnId: input.turn_id, claim: extractClaim(input),
@@ -93,12 +113,14 @@ async function handleStop(input, { agent = 'codex' } = {}) {
         git: { head, base, commitsSinceBase }, fingerprint,
         config: { fingerprint: cfgFp, changedSinceLastVerified: configChanged, ...(configChanged && last.testCommand && last.testCommand !== cfg.testCommand ? { previousTestCommand: last.testCommand } : {}) },
         warnings, criteriaFiles: cfg.criteriaFiles, environment: ctx.environment,
+        requireChanges: !!cfg.requireChanges, scope: safeScope(root, cfg.testCommand),
       });
       // agentundo (optional): snapshot id of the verified state; for the user only, never in the block reason.
       const undo = recordUndo(root, receipt.status, receiptName(receipt));
       if (undo) receipt.undo = undo;
       const file = writeReceipt(root, receipt);
-      setBlocks(root, sessionId, canBlock ? blockCount : 0); // reset once the agent is allowed to stop
+      // reset once the agent is allowed to stop
+      setBlocks(root, sessionId, canBlock ? blockCount : 0, canBlock && (turn.askedForChanges || askChanges) ? { askedForChanges: true } : null);
       if (!canBlock) setLast(root, { sha: head, configFingerprint: cfgFp, testCommand: cfg.testCommand, receipt: path.basename(file) });
       const text = formatReceipt(receipt);
       const output = canBlock

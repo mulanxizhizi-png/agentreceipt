@@ -11,11 +11,15 @@ function file(root, sessionId) { return path.join(root, DIR, 'state', `${key(ses
 function getBlocks(root, sessionId) {
   try { return JSON.parse(fs.readFileSync(file(root, sessionId), 'utf8')).blocks || 0; } catch { return 0; }
 }
-function setBlocks(root, sessionId, blocks) {
+// Extra per-session flags for the current turn (e.g. { askedForChanges: true }).
+function getTurn(root, sessionId) {
+  try { return JSON.parse(fs.readFileSync(file(root, sessionId), 'utf8')).turn || {}; } catch { return {}; }
+}
+function setBlocks(root, sessionId, blocks, turn) {
   const f = file(root, sessionId);
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const tmp = `${f}.${process.pid}.${Date.now()}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify({ blocks, updatedAt: new Date().toISOString() }) + '\n');
+  fs.writeFileSync(tmp, JSON.stringify({ blocks, ...(turn && Object.keys(turn).length ? { turn } : {}), updatedAt: new Date().toISOString() }) + '\n');
   fs.renameSync(tmp, f);
 }
 
@@ -50,4 +54,4 @@ function setLast(root, data) {
   fs.renameSync(tmp, f);
 }
 
-module.exports = { getBlocks, setBlocks, withSessionLock, key, getLast, setLast };
+module.exports = { getTurn, getBlocks, setBlocks, withSessionLock, key, getLast, setLast };

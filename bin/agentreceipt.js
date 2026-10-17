@@ -8,6 +8,9 @@ const { detectTestCommand } = require('../src/detect');
 const { hookMain } = require('../src/hook');
 const inst = require('../src/install');
 const { formatReceipt } = require('../src/receipt');
+// Hook limit (install.HOOK_TIMEOUT, 900s) minus 120s headroom for everything else the hook does
+// (git diff, code fingerprints before/after, receipt + agentundo snapshot).
+const MAX_PRACTICAL_TIMEOUT = 780;
 
 function flag(args, name, def) {
   const i = args.indexOf(name);
@@ -24,7 +27,7 @@ async function init(args) {
   const root = findRoot(process.cwd());
   let existing = {};
   try { existing = loadConfig(root) || {}; } catch (e) {
-    if (!flag(args, '--test') && !flag(args, '--max-blocks') && !flag(args, '--timeout')) { console.error(`agentreceipt: ${e.message}`); process.exit(1); }
+    if (!flag(args, '--test') && !flag(args, '--max-blocks') && !flag(args, '--timeout') && !args.includes('--require-changes') && !args.includes('--no-require-changes')) { console.error(`agentreceipt: ${e.message}`); process.exit(1); }
     try { existing = JSON.parse(fs.readFileSync(path.join(root, DIR, 'config.json'), 'utf8')); } catch { existing = {}; }
   }
   let testCommand = flag(args, '--test', existing.testCommand);
@@ -39,9 +42,17 @@ async function init(args) {
     timeoutSec: parseNum(flag(args, '--timeout', existing.timeoutSec ?? DEFAULTS.timeoutSec)),
     maxBlocks: parseNum(flag(args, '--max-blocks', existing.maxBlocks ?? DEFAULTS.maxBlocks)),
   };
+  // Boolean flags: --require-changes turns it on, --no-require-changes off; otherwise keep the existing value.
+  if (args.includes('--require-changes')) cfg.requireChanges = true;
+  else if (args.includes('--no-require-changes')) cfg.requireChanges = false;
   const errs = validateConfig(cfg);
   if (errs.length) { console.error(`agentreceipt: invalid settings: ${errs.join('; ')}`); process.exit(1); }
   saveConfig(root, cfg);
+  if (cfg.timeoutSec > MAX_PRACTICAL_TIMEOUT) console.warn(`Warning: --timeout ${cfg.timeoutSec}s is above ~${MAX_PRACTICAL_TIMEOUT}s. The agent kills the whole Stop hook after ${inst.HOOK_TIMEOUT}s, so a test run that long ends with no receipt. Keep it at ${MAX_PRACTICAL_TIMEOUT} or less, or run a faster subset locally.`);
+  try {
+    const sc = require('../src/scope').testScope(root, cfg.testCommand);
+    if (sc && sc.partial) console.log(`Note: \`${cfg.testCommand}\` runs only part of the test suite (detected full suite: \`${sc.detectedCommand}\`). Receipts will say so; run the full suite in CI.`);
+  } catch {}
   // keep receipts/state out of git by default; config stays committable
   // .agentreceipt/.gitignore travels with a committed config.json (teammates' receipts stay ignored);
   // .git/info/exclude keeps `git status` clean right away for this clone.
@@ -145,7 +156,7 @@ async function main() {
     default:
       console.log(`agentreceipt ${inst.VERSION}
 Usage:
-  agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope local|user] [--timeout 300] [--max-blocks 3]
+  agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope local|user] [--timeout 300] [--max-blocks 3] [--require-changes]
   agentreceipt last        print the latest receipt
   agentreceipt uninstall [--global] [--purge [--yes]]
       remove this project's hooks and generated files (config.json is kept)
