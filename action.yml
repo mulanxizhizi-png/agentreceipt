@@ -23,7 +23,7 @@ inputs:
     default: ${{ github.token }}
 outputs:
   status:
-    description: "green (tests pass), red (tests failing) or error (agentreceipt could not verify, e.g. invalid .agentreceipt/config.json); red and error fail the check"
+    description: "green (tests pass), red (tests failing, or no files changed when requireChanges is on) or error (agentreceipt could not verify, e.g. invalid .agentreceipt/config.json); red and error fail the check"
     value: ${{ steps.receipt.outputs.status }}
   receipt-path:
     description: Path to the JSON receipt
