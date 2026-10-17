@@ -64,6 +64,7 @@ test('requireChanges: no changes -> blocked once (counts toward maxBlocks); next
   assert.equal(b.receipt.blocks.count, 1);
   assert.match(b.text, /NO FILES WERE CHANGED in this turn \(requireChanges is on\)/);
   assert.match(b.text, /Stopped without changing any files/);
+  assert.match(b.text, /RED  stopped without changes/); assert.doesNotMatch(b.text, /failing tests/);
   assert.doesNotMatch(b.text, /tests still failing/);
   // fresh turn: asked again
   const c = await handleStop({ cwd: d, session_id: 'r', stop_hook_active: false });
