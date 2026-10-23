@@ -193,6 +193,24 @@ jobs:
 
 Outputs: `status` (`green`, `red`, or `error` when agentreceipt couldn't verify, e.g. an invalid config; red and error fail the check) and `receipt-path`. The comment also shows the "no files were changed" and "only part of the test suite ran" notes, and with `requireChanges` a PR that changes no files fails the check. The receipt is also added to the job summary. No dependencies; it uses the runner's Node.
 
+
+## Doctor (hooks / skills checkup)
+
+```
+agentreceipt doctor
+agentreceipt doctor --canary
+agentreceipt doctor --strict
+```
+
+`doctor` checks whether agentreceipt is actually installed and wired, not just whether a config file exists:
+
+- **Static (default):** `.agentreceipt/config.json` is readable; Codex `hooks.json` and Claude settings (`settings.local.json` / user `settings.json`) parse cleanly; a managed Stop hook is present and its command points at the shim (`~/.agentreceipt/bin/agentreceipt-hook`) or a runtime copy; missing command paths and UTF-8 BOM are **errors**; a wrong `hooks.Stop` shape is an **error**; skill `description` fields that look long enough to be truncated get a **warn**.
+- **`--canary`:** runs one harmless Stop-hook probe in a temporary project (does not modify your repo) and reports whether the shim **triggered** or **not**.
+- Exit codes: any **error** → non-zero; **warn**-only → 0; with **`--strict`**, warns also exit non-zero. A failed canary is non-zero.
+- Output always notes: test failures are already blocked by the Stop hook; **tool-call false-success is not in v1** (planned for v1.1).
+
+Unlike [agnix](https://github.com/agent-sh/agnix) (static rules/config lint), agentreceipt doctor is an **install-time / runtime check** of whether *your* Stop hook is present and can run — it is not a general static rules engine.
+
 ## Uninstall
 
 ```

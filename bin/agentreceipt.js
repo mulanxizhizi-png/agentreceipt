@@ -8,6 +8,7 @@ const { detectTestCommand } = require('../src/detect');
 const { hookMain } = require('../src/hook');
 const inst = require('../src/install');
 const { formatReceipt } = require('../src/receipt');
+const { doctor } = require('../src/doctor');
 // Hook limit (install.HOOK_TIMEOUT, 900s) minus 120s headroom for everything else the hook does
 // (git diff, code fingerprints before/after, receipt + agentundo snapshot).
 const MAX_PRACTICAL_TIMEOUT = 780;
@@ -152,12 +153,22 @@ async function main() {
       if (failed) process.exitCode = 1;
       return;
     }
+    case 'doctor': {
+      const r = doctor(args);
+      console.log(r.text);
+      process.exitCode = r.code;
+      return;
+    }
     case '--version': case '-v': return console.log(inst.VERSION);
     default:
       console.log(`agentreceipt ${inst.VERSION}
 Usage:
   agentreceipt init [--test "<cmd>"] [--agent codex|claude|all] [--claude-scope local|user] [--timeout 300] [--max-blocks 3] [--require-changes]
   agentreceipt last        print the latest receipt
+  agentreceipt doctor [--canary] [--strict]
+      static checks for hooks/skills install; optional harmless canary in a temp dir
+      --canary: invoke the Stop shim once in a temp project (does not touch this repo)
+      --strict: treat warnings as errors (non-zero exit)
   agentreceipt uninstall [--global] [--purge [--yes]]
       remove this project's hooks and generated files (config.json is kept)
       --global: also Codex/user hooks + runtime; other projects lose hooks/state/logs but keep receipts
